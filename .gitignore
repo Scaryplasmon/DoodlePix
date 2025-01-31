@@ -3,6 +3,15 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+/DoodlePixV2/
+/DoodlePixV2_model/
+/DoodlePix_chest/
+/DoodlePix_V1/
+/ex_train_data/
+/output/
+/train2/
+/iconix2pix_V2/
+
 # C extensions
 *.so
 
