@@ -1,0 +1,83 @@
+---iconix2pix
+
+accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="Lykon/dreamshaper-8" --train_data_dir="train" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=4 --gradient_checkpointing --max_train_steps=15000 --checkpointing_steps=5000 --learning_rate=5e-05 --max_grad_norm=1 --lr_warmup_steps=0 --conditioning_dropout_prob=0.05 --mixed_precision=fp16 --enable_xformers_memory_efficient_attention --use_8bit_adam --seed=42 --output_dir="icon_pix2pix_V1" --cache_dir C:\Users\andre\Desktop\Cursor\caption\pix2pix\diffusers\examples\instruct_pix2pix\cache
+
+---iconix3pix
+
+accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="stable-diffusion-v1-5/stable-diffusion-v1-5" --train_data_dir="train2" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=4 --gradient_checkpointing --max_train_steps=15000 --checkpointing_steps=5000 --learning_rate=5e-05 --max_grad_norm=1 --lr_warmup_steps=0 --conditioning_dropout_prob=0.05 --mixed_precision=fp16 --enable_xformers_memory_efficient_attention --use_8bit_adam --seed=42 --validation_epochs=1 --output_dir="iconix2pix_V2" --cache_dir C:\Users\andre\Desktop\Cursor\caption\pix2pix\diffusers\examples\instruct_pix2pix\cache --val_images_dir "train2/val/
+
+--DoodlePixV2
+accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="Lykon/dreamshaper-8" --train_data_dir="DoodlePixV2" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=8 --gradient_checkpointing --max_train_steps=1000 --checkpointing_steps=5000 --learning_rate=6e-05 --max_grad_norm=1 --lr_warmup_steps=0 --conditioning_dropout_prob=0.04 --mixed_precision=fp16 --enable_xformers_memory_efficient_attention --use_8bit_adam --seed=42 --validation_epochs=1 --output_dir="iconix2pix_V2" --cache_dir C:\Users\andre\Desktop\Cursor\caption\pix2pix\diffusers\examples\instruct_pix2pix\cache --val_images_dir="DoodlePixV2/val/" --validation_steps=1000
+
+--DoodlePixV3
+accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="Lykon/dreamshaper-8" --train_data_dir="DoodlePixV2" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=8 --gradient_checkpointing --max_train_steps=15000 --checkpointing_steps=5000 --learning_rate=5e-05 --max_grad_norm=1 --lr_warmup_steps=0 --conditioning_dropout_prob=0.05 --mixed_precision=fp16 --enable_xformers_memory_efficient_attention --use_8bit_adam --seed=42 --validation_epochs=1 --output_dir="DoodlePixV3" --cache_dir C:\Users\andre\Desktop\Cursor\caption\pix2pix\diffusers\examples\instruct_pix2pix\cache --val_images_dir="DoodlePixV2/val/" --validation_steps=2500
+
+--DoodlePixV4
+accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="Lykon/dreamshaper-8" --train_data_dir="DoodlePixV2" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=2 --gradient_checkpointing --max_train_steps=15000 --checkpointing_steps=5000 --learning_rate=7.5e-05 --max_grad_norm=1 --lr_warmup_steps=0 --conditioning_dropout_prob=0.015 --mixed_precision=fp16 --enable_xformers_memory_efficient_attention --use_8bit_adam --seed=42 --validation_epochs=2 --output_dir="DoodlePixV4_model" --cache_dir C:\Users\andre\Desktop\Cursor\caption\pix2pix\diffusers\examples\instruct_pix2pix\cache --val_images_dir="DoodlePixV2/val/" --validation_steps=2500
+--DoodlePixV4
+accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="Lykon/dreamshaper-8" --train_data_dir="DoodlePixV2" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=8 --gradient_checkpointing --max_train_steps=20000 --checkpointing_steps=5000 --learning_rate=1e-04 --max_grad_norm=1 --lr_warmup_steps=0 --conditioning_dropout_prob=0.015 --mixed_precision=fp16 --enable_xformers_memory_efficient_attention --use_8bit_adam --seed=42 --validation_epochs=2 --output_dir="DoodlePixV4_model" --cache_dir C:\Users\andre\Desktop\Cursor\caption\pix2pix\diffusers\examples\instruct_pix2pix\cache --val_images_dir="DoodlePixV2/val/" --validation_steps=2500
+
+--DoodlePixV1.5
+accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="stable-diffusion-v1-5/stable-diffusion-v1-5" --train_data_dir="DoodlePixV2" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=4 --gradient_checkpointing --max_train_steps=15000 --checkpointing_steps=5000 --learning_rate=5e-05 --max_grad_norm=1 --lr_warmup_steps=0 --conditioning_dropout_prob=0.05 --enable_xformers_memory_efficient_attention --use_8bit_adam --seed=42 --validation_epochs=1 --output_dir="DoodlePixV15" --cache_dir C:\Users\andre\Desktop\Cursor\caption\pix2pix\diffusers\examples\instruct_pix2pix\cache --val_images_dir="DoodlePixV2/val/" --validation_steps=500
+
+
+What do they do
+
+I'll explain the core training parameters and their impact on model performance:
+Core Training Parameters:
+
+learning_rate (5e-05)
+    Controls how much the model updates its weights in each step
+    Higher (e.g., 1e-4): Faster learning but risk of instability/overshooting
+    Lower (e.g., 1e-5): More stable but slower learning
+    For Stable Diffusion fine-tuning, typically between 1e-5 to 1e-4
+    Your value (5e-5) is a good middle ground
+
+gradient_accumulation_steps (4)
+    Accumulates gradients over multiple forward passes before updating
+    Effectively simulates larger batch size without more memory
+    Higher values (e.g., 4-8): More stable training, better for small GPUs
+    Lower values (e.g., 1-2): Faster training but needs more GPU memory
+    Your value (4) is good for balancing stability and speed
+
+train_batch_size (1)
+    Number of images processed in each forward pass
+    Larger batches: More stable gradients but more GPU memory
+    Smaller batches: Less memory but noisier updates
+    Your value (1) is small, but works with gradient accumulation
+
+4. conditioning_dropout_prob (0.05)
+    Probability of dropping conditioning (prompts/images) during training
+    Higher (e.g., 0.1): Better generalization but less prompt adherence
+    Lower (e.g., 0.02): Stronger prompt adherence but might overfit
+    Your value (0.05) is a good balance
+max_grad_norm (1)
+    Clips gradients to prevent explosive updates
+    Higher values: More dynamic learning but risk of instability
+    Lower values: More stable but might learn slower
+    Your value (1) is standard and safe
+
+For Better Prompt Adherence:
+Try adjusting these parameters:
+Consider adding:
+
+For more stable training:
+
+Best Practices for Training:
+Start with conservative values:
+Lower learning rate (2e-5)
+Higher gradient accumulation (8)
+Lower conditioning dropout (0.03)
+If the model isn't learning well:
+Increase learning rate gradually
+Decrease gradient accumulation
+Monitor validation images for progress
+If training is unstable:
+Decrease learning rate
+Increase gradient accumulation
+Increase max_grad_norm slightly
+For better prompt adherence:
+Keep conditioning_dropout_prob low (0.02-0.05)
+Use smaller learning rate
+Increase training steps
+Remember: These are guidelines, and the optimal values often depend on your specific dataset and goals. Monitor your training logs and validation images to fine-tune these parameters.

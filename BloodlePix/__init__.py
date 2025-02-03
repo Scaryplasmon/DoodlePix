@@ -7,6 +7,7 @@ bl_info = {
     "version": (1, 0, 0),
     "location": "ObjectProperties"
 }
+from datetime import datetime
 
 import os
 import bpy
@@ -200,6 +201,12 @@ class DoodlePixPanel(bpy.types.Panel):
         box.prop(props, "output_path")
         box.prop(props, "negative_prompt")
         box.prop(props, "seed")
+        
+        box = layout.box()
+        box.label(text="Run Settings", icon='FILE_BACKUP')
+        row = box.row(align=True)
+        row.operator("doodlepix.save_settings", icon='FILE_TICK')
+        row.operator("doodlepix.load_settings", icon='FILE_REFRESH')
 
         # Operators
         box = layout.box()
@@ -306,7 +313,79 @@ def update_image_in_blender(image_pil, image_name="generated_image"):
                 if space.type == 'IMAGE_EDITOR':
                     space.image = image
     print("Image updated")
+class DoodlePixSaveSettingsOperator(bpy.types.Operator):
+    bl_idname = "doodlepix.save_settings"
+    bl_label = "Save Run Settings"
     
+    filepath: bpy.props.StringProperty(
+        subtype='FILE_PATH',
+        default="//doodlepix_settings.json"
+    ) # type: ignore
+    
+    def execute(self, context):
+        props = context.scene.doodle_pix
+        
+        # Collect all settings needed for reproduction
+        settings = {
+            "timestamp": datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
+            "model_path": props.model_path,
+            "is_drawing_mode": props.is_drawing_mode,
+            "control_type": props.control_type,
+            "is_doodle": props.is_doodle,
+            "style_mode": props.style_mode,
+            "subject": props.subject,
+            "theme": props.theme,
+            "colors": props.colors,
+            "details": props.details,
+            "num_inference_steps": props.num_inference_steps,
+            "guidance_scale": props.guidance_scale,
+            "image_guidance_scale": props.image_guidance_scale,
+            "negative_prompt": props.negative_prompt,
+            "seed": props.seed
+        }
+        
+        filepath = bpy.path.abspath(self.filepath)
+        if doodle_pipeline.save_run_settings(settings, filepath):
+            self.report({'INFO'}, f"Settings saved to {filepath}")
+        else:
+            self.report({'ERROR'}, "Failed to save settings")
+            
+        return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        self.filepath = f"//doodlepix_run_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}
+
+class DoodlePixLoadSettingsOperator(bpy.types.Operator):
+    bl_idname = "doodlepix.load_settings"
+    bl_label = "Load Run Settings"
+    
+    filepath: bpy.props.StringProperty(
+        subtype='FILE_PATH'
+    ) # type: ignore
+    
+    def execute(self, context):
+        filepath = bpy.path.abspath(self.filepath)
+        settings = doodle_pipeline.load_run_settings(filepath)
+        
+        if settings:
+            props = context.scene.doodle_pix
+            
+            # Apply loaded settings
+            for key, value in settings.items():
+                if key != "timestamp" and hasattr(props, key):
+                    setattr(props, key, value)
+                    
+            self.report({'INFO'}, f"Settings loaded from {filepath}")
+        else:
+            self.report({'ERROR'}, "Failed to load settings")
+            
+        return {'FINISHED'}
+    
+    def invoke(self, context, event):
+        context.window_manager.fileselect_add(self)
+        return {'RUNNING_MODAL'}    
 class DoodlePixOffloadOperator(bpy.types.Operator):
     bl_idname = "doodlepix.offload"
     bl_label = "Offload Model"
@@ -326,6 +405,8 @@ def register():
     bpy.utils.register_class(DoodlePixSetStyleOperator)
     bpy.utils.register_class(DoodlePixGenerateOperator)
     bpy.utils.register_class(DoodlePixOffloadOperator)
+    bpy.utils.register_class(DoodlePixSaveSettingsOperator)
+    bpy.utils.register_class(DoodlePixLoadSettingsOperator)
     bpy.types.Scene.doodle_pix = bpy.props.PointerProperty(type=DoodlePixProperties)
 
 def unregister():
@@ -335,6 +416,9 @@ def unregister():
     bpy.utils.unregister_class(DoodlePixSetStyleOperator)
     bpy.utils.unregister_class(DoodlePixGenerateOperator)
     bpy.utils.unregister_class(DoodlePixOffloadOperator)
+    bpy.utils.unregister_class(DoodlePixSaveSettingsOperator)
+    bpy.utils.unregister_class(DoodlePixLoadSettingsOperator)
+
 
 if __name__ == "__main__":
     register()
