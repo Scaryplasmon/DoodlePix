@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 
 /DoodlePixV2/
+/DoodlePixV4/
 /DoodlePixV2_model/
 /DoodlePix_chest/
 /DoodlePix_V1/
@@ -11,12 +12,14 @@ __pycache__/
 /output/
 /train2/
 /iconix2pix_V2/
+/models/
 
 # C extensions
 *.so
 
 # Distribution / packaging
 .Python
+
 build/
 develop-eggs/
 dist/
