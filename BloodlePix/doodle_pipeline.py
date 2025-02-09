@@ -1,7 +1,16 @@
 import torch
 import numpy as np
 from PIL import Image, ImageOps
-from diffusers import StableDiffusionInstructPix2PixPipeline
+from diffusers import (
+    StableDiffusionInstructPix2PixPipeline,
+    DDIMScheduler,
+    DDPMScheduler,
+    PNDMScheduler,
+    EulerAncestralDiscreteScheduler,
+    DPMSolverMultistepScheduler
+)
+from transformers import CLIPTextModel
+from peft import PeftModel
 import cv2
 import controlnet_hinter
 
@@ -39,17 +48,42 @@ CONTROLNET_MAPPING = {
     }
 }
 
-def setup_pipeline(model_path):
-    """Initialize the pipeline with optimizations"""
+SCHEDULER_MAP = {
+    "DDIM": DDIMScheduler,
+    "DDPM": DDPMScheduler,
+    "PNDM": PNDMScheduler,
+    "Euler A": EulerAncestralDiscreteScheduler,
+    "DPM++": DPMSolverMultistepScheduler,
+}
+
+def setup_pipeline(model_path, scheduler_name="DDIM", text_encoder_lora_path=None):
+    """Initialize the pipeline with optimizations and custom components"""
     try:
+        # Initialize base pipeline
         pipe = StableDiffusionInstructPix2PixPipeline.from_pretrained(
             model_path,
             torch_dtype=torch.float16,
             use_safetensors=True,
             use_memory_efficient_attention=True,
             safety_checker=None
-        ).to("cuda")
+        )
         
+        # Set scheduler if specified
+        if scheduler_name in SCHEDULER_MAP:
+            pipe.scheduler = SCHEDULER_MAP[scheduler_name].from_config(pipe.scheduler.config)
+        
+        # Load and apply LoRA weights to text encoder if specified
+        if text_encoder_lora_path:
+            print(f"Loading LoRA text encoder from {text_encoder_lora_path}")
+            base_text_encoder = pipe.text_encoder
+            pipe.text_encoder = PeftModel.from_pretrained(
+                base_text_encoder,
+                text_encoder_lora_path,
+                is_trainable=False
+            )
+        
+        # Move to GPU and enable optimizations
+        pipe = pipe.to("cuda")
         pipe.enable_model_cpu_offload()
         pipe.enable_attention_slicing(slice_size="auto")
         pipe.enable_vae_slicing()
@@ -71,24 +105,22 @@ def process_image(image, is_drawing_mode=True, control_type="canny"):
         # Apply control net processing
         return CONTROLNET_MAPPING[control_type]["hinter"](image)
 
-def build_prompt(subject="", theme="", colors="", details="", is_doodle=False, style_mode="default"):
+def build_prompt(subject="", colors="", world_style="fantasy", complexity=3, perspective="3d", description=""):
     """Build the complete prompt from components"""
     prompt_parts = []
     
-    if is_doodle:
-        prompt_parts.append("<doodle>")
-        
-    if style_mode != "default":
-        prompt_parts.append(f"<mode: {style_mode}>")
-        
     if subject:
-        prompt_parts.append(f"<subject: {subject}>")
-    if theme:
-        prompt_parts.append(f"<theme: {theme}>")
+        prompt_parts.append(f"<s: {subject.lower()}>")
     if colors:
-        prompt_parts.append(f"<colors: {colors}>")
-    if details:
-        prompt_parts.append(f"<details: {details}>")
+        prompt_parts.append(f"<c: {colors.lower()}>")
+    if world_style:
+        prompt_parts.append(f"<w: {world_style.lower()}>")
+    if complexity is not None:
+        prompt_parts.append(f"<k: {str(complexity)}>")
+    if perspective:
+        prompt_parts.append(f"<p: {perspective.lower()}>")
+    if description:
+        prompt_parts.append(f"<d: {description.lower()}>")
         
     return ", ".join(prompt_parts)
 

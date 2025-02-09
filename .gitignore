@@ -182,3 +182,7 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 .vscode/settings.json
+/analysis_results
+/validation_results
+README_sdxl.md
+READMEdiffusers.md

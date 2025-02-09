@@ -65,32 +65,58 @@ class DoodlePixProperties(bpy.types.PropertyGroup):
         name="Style",
         description="Select generation style",
         items=[
-            ('default', "Default", "Default style", 'NONE', 0),
-            ('crisp', "Crisp", "Crisp style", 'OUTLINER', 1),
+            ('fantasy', "Fantasy", "Fantasy style", 'GHOST_ENABLED', 0),
+            ('cute', "Cute", "Cute style", 'HEART', 1),
             ('3d', "3D", "3D style", 'VIEW3D', 2),
-            ('outline', "Outline", "Outline style", 'GREASEPENCIL', 3),
         ],
-        default='default'
+        default='fantasy'
     ) # type: ignore
 
+    # New Prompt Components
     subject: bpy.props.StringProperty(
-        name="Subject",
+        name="Subject (s)",
         description="Main subject of the image"
     ) # type: ignore
 
-    theme: bpy.props.StringProperty(
-        name="Theme",
-        description="Theme of the image"
-    ) # type: ignore
-
     colors: bpy.props.StringProperty(
-        name="Colors",
-        description="Color scheme"
+        name="Colors & Materials (c)",
+        description="Colors and materials description"
     ) # type: ignore
 
-    details: bpy.props.StringProperty(
-        name="Details",
-        description="Additional details"
+    world_style: bpy.props.EnumProperty(
+        name="World Style (w)",
+        description="World style for the generation",
+        items=[
+            ('earth', "Earth", "Earth style", 'WORLD', 0),
+            ('galactic', "Galactic", "Galactic style", 'LIGHT_SUN', 1),
+            ('fantasy', "Fantasy", "Fantasy style", 'GHOST_ENABLED', 2),
+            ('whimsy', "Whimsy", "Whimsical style", 'HEART', 3),
+        ],
+        default='fantasy'
+    ) # type: ignore
+
+    complexity: bpy.props.IntProperty(
+        name="Complexity (k)",
+        description="Complexity level of the generation",
+        min=0,
+        max=10,
+        default=3
+    ) # type: ignore
+
+    perspective: bpy.props.EnumProperty(
+        name="Perspective (p)",
+        description="Perspective style",
+        items=[
+            ('flat', "Flat", "Flat style", 'MESH_PLANE', 0),
+            ('3d', "3D", "3D style", 'VIEW3D', 1),
+            ('painted', "Painted", "Painted style", 'BRUSH_DATA', 2),
+        ],
+        default='3d'
+    ) # type: ignore
+
+    description: bpy.props.StringProperty(
+        name="Description (d)",
+        description="Detailed description of the desired output"
     ) # type: ignore
 
     # Generation Parameters
@@ -137,7 +163,55 @@ class DoodlePixProperties(bpy.types.PropertyGroup):
         default=42
     ) # type: ignore
 
+    # Scheduler Selection
+    scheduler_type: bpy.props.EnumProperty(
+        name="Scheduler",
+        description="Select the scheduler for generation",
+        items=[
+            ('DDIM', "DDIM", "DDIM Scheduler"),
+            ('DDPM', "DDPM", "DDPM Scheduler"),
+            ('PNDM', "PNDM", "PNDM Scheduler"),
+            ('Euler A', "Euler A", "Euler Ancestral Scheduler"),
+            ('DPM++', "DPM++", "DPM++ Solver"),
+        ],
+        default='DDIM'
+    ) # type: ignore
+    
+    # LoRA Text Encoder Path
+    text_encoder_lora_path: bpy.props.StringProperty(
+        name="Text Encoder LoRA",
+        description="Path to LoRA weights for text encoder",
+        subtype='FILE_PATH'
+    ) # type: ignore
+    
+    use_text_encoder_lora: bpy.props.BoolProperty(
+        name="Use Text Encoder LoRA",
+        description="Enable custom text encoder LoRA",
+        default=False
+    ) # type: ignore
 
+class DoodlePixSetWorldStyleOperator(bpy.types.Operator):
+    bl_idname = "doodlepix.set_world_style"
+    bl_label = "Set World Style"
+    bl_description = "Set the world style for generation"
+    
+    style: bpy.props.StringProperty()
+    
+    def execute(self, context):
+        context.scene.doodle_pix.world_style = self.style
+        return {'FINISHED'}
+
+class DoodlePixSetPerspectiveOperator(bpy.types.Operator):
+    bl_idname = "doodlepix.set_perspective"
+    bl_label = "Set Perspective"
+    bl_description = "Set the perspective style"
+    
+    perspective: bpy.props.StringProperty()
+    
+    def execute(self, context):
+        context.scene.doodle_pix.perspective = self.perspective
+        return {'FINISHED'}
+    
 class DoodlePixPanel(bpy.types.Panel):
     bl_label = "DoodlePix Generator"
     bl_idname = "VIEW3D_PT_doodle_pix"
@@ -156,6 +230,14 @@ class DoodlePixPanel(bpy.types.Panel):
         box.label(text="Model Setup", icon='FILE_BLEND')
         box.prop(props, "model_path")
         box.prop(props, "use_loaded_model")
+        box.prop(props, "scheduler_type")
+        
+        # LoRA Setup
+        box = layout.box()
+        box.label(text="LoRA Setup", icon='FILE_FONT')
+        box.prop(props, "use_text_encoder_lora")
+        if props.use_text_encoder_lora:
+            box.prop(props, "text_encoder_lora_path")
 
         # Mode Selection
         box = layout.box()
@@ -166,7 +248,7 @@ class DoodlePixPanel(bpy.types.Panel):
         if not props.is_drawing_mode:
             box.prop(props, "control_type")
 
-        # Prompt Building
+        # Updated Prompt Building
         box = layout.box()
         box.label(text="Prompt Building", icon='TEXT')
         box.prop(props, "is_doodle")
@@ -174,7 +256,7 @@ class DoodlePixPanel(bpy.types.Panel):
         # Style Selection
         box.label(text="Style:")
         row = box.row(align=True)
-        for style in ['default', 'crisp', '3d', 'outline']:
+        for style in ['fantasy', 'cute', '3d']:
             icon = 'RADIOBUT_ON' if props.style_mode == style else 'RADIOBUT_OFF'
             row.operator(
                 "doodlepix.set_style",
@@ -184,9 +266,11 @@ class DoodlePixPanel(bpy.types.Panel):
 
         # Prompt Components
         box.prop(props, "subject")
-        box.prop(props, "theme")
         box.prop(props, "colors")
-        box.prop(props, "details")
+        box.prop(props, "world_style")
+        box.prop(props, "complexity")
+        box.prop(props, "perspective")
+        box.prop(props, "description")
 
         # Generation Parameters
         box = layout.box()
@@ -234,6 +318,15 @@ class DoodlePixGenerateOperator(bpy.types.Operator):
         global pipeline_instance
         
         try:
+            # Initialize or get pipeline with scheduler and LoRA
+            if pipeline_instance is None or not props.use_loaded_model:
+                lora_path = props.text_encoder_lora_path if props.use_text_encoder_lora else None
+                pipeline_instance = doodle_pipeline.setup_pipeline(
+                    props.model_path,
+                    scheduler_name=props.scheduler_type,
+                    text_encoder_lora_path=lora_path
+                )
+            
             # Get the current render result
             bpy.ops.render.render(write_still=True)
             rendered_image = bpy.data.images['Render Result']
@@ -252,20 +345,16 @@ class DoodlePixGenerateOperator(bpy.types.Operator):
             process_path = os.path.join(bpy.path.abspath(props.output_path), "processed_image.png")
             processed_image.save(process_path)
             
-            # Build prompt
+            # Updated prompt building
             prompt = doodle_pipeline.build_prompt(
                 subject=props.subject,
-                theme=props.theme,
                 colors=props.colors,
-                details=props.details,
-                is_doodle=props.is_doodle,
-                style_mode=props.style_mode
+                world_style=props.world_style,
+                complexity=props.complexity,
+                perspective=props.perspective,
+                description=props.description
             )
-            print(prompt)
-            
-            # Initialize or get pipeline
-            if pipeline_instance is None or not props.use_loaded_model:
-                pipeline_instance = doodle_pipeline.setup_pipeline(props.model_path)
+            print(f"Generated prompt: {prompt}")  # Debug print
             
             #set seed
             generator= torch.Generator("cuda").manual_seed(props.seed)
@@ -325,7 +414,6 @@ class DoodlePixSaveSettingsOperator(bpy.types.Operator):
     def execute(self, context):
         props = context.scene.doodle_pix
         
-        # Collect all settings needed for reproduction
         settings = {
             "timestamp": datetime.now().strftime("%Y-%m-%d_%H-%M-%S"),
             "model_path": props.model_path,
@@ -334,14 +422,19 @@ class DoodlePixSaveSettingsOperator(bpy.types.Operator):
             "is_doodle": props.is_doodle,
             "style_mode": props.style_mode,
             "subject": props.subject,
-            "theme": props.theme,
             "colors": props.colors,
-            "details": props.details,
+            "world_style": props.world_style,
+            "complexity": props.complexity,
+            "perspective": props.perspective,
+            "description": props.description,
             "num_inference_steps": props.num_inference_steps,
             "guidance_scale": props.guidance_scale,
             "image_guidance_scale": props.image_guidance_scale,
             "negative_prompt": props.negative_prompt,
-            "seed": props.seed
+            "seed": props.seed,
+            "scheduler_type": props.scheduler_type,
+            "use_text_encoder_lora": props.use_text_encoder_lora,
+            "text_encoder_lora_path": props.text_encoder_lora_path,
         }
         
         filepath = bpy.path.abspath(self.filepath)
@@ -407,7 +500,10 @@ def register():
     bpy.utils.register_class(DoodlePixOffloadOperator)
     bpy.utils.register_class(DoodlePixSaveSettingsOperator)
     bpy.utils.register_class(DoodlePixLoadSettingsOperator)
+    bpy.utils.register_class(DoodlePixSetWorldStyleOperator)
+    bpy.utils.register_class(DoodlePixSetPerspectiveOperator)
     bpy.types.Scene.doodle_pix = bpy.props.PointerProperty(type=DoodlePixProperties)
+
 
 def unregister():
     del bpy.types.Scene.doodle_pix
@@ -418,6 +514,9 @@ def unregister():
     bpy.utils.unregister_class(DoodlePixOffloadOperator)
     bpy.utils.unregister_class(DoodlePixSaveSettingsOperator)
     bpy.utils.unregister_class(DoodlePixLoadSettingsOperator)
+    bpy.utils.unregister_class(DoodlePixSetWorldStyleOperator)
+    bpy.utils.unregister_class(DoodlePixSetPerspectiveOperator)
+
 
 
 if __name__ == "__main__":

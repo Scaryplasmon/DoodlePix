@@ -14,11 +14,21 @@ accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretraine
 
 --DoodlePixV4
 accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="Lykon/dreamshaper-8" --train_data_dir="DoodlePixV2" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=2 --gradient_checkpointing --max_train_steps=15000 --checkpointing_steps=5000 --learning_rate=7.5e-05 --max_grad_norm=1 --lr_warmup_steps=0 --conditioning_dropout_prob=0.015 --mixed_precision=fp16 --enable_xformers_memory_efficient_attention --use_8bit_adam --seed=42 --validation_epochs=2 --output_dir="DoodlePixV4_model" --cache_dir C:\Users\andre\Desktop\Cursor\caption\pix2pix\diffusers\examples\instruct_pix2pix\cache --val_images_dir="DoodlePixV2/val/" --validation_steps=2500
---DoodlePixV4
-accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="Lykon/dreamshaper-8" --train_data_dir="DoodlePixV2" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=8 --gradient_checkpointing --max_train_steps=20000 --checkpointing_steps=5000 --learning_rate=1e-04 --max_grad_norm=1 --lr_warmup_steps=0 --conditioning_dropout_prob=0.015 --mixed_precision=fp16 --enable_xformers_memory_efficient_attention --use_8bit_adam --seed=42 --validation_epochs=2 --output_dir="DoodlePixV4_model" --cache_dir C:\Users\andre\Desktop\Cursor\caption\pix2pix\diffusers\examples\instruct_pix2pix\cache --val_images_dir="DoodlePixV2/val/" --validation_steps=2500
 
---DoodlePixV1.5
-accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="stable-diffusion-v1-5/stable-diffusion-v1-5" --train_data_dir="DoodlePixV2" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=4 --gradient_checkpointing --max_train_steps=15000 --checkpointing_steps=5000 --learning_rate=5e-05 --max_grad_norm=1 --lr_warmup_steps=0 --conditioning_dropout_prob=0.05 --enable_xformers_memory_efficient_attention --use_8bit_adam --seed=42 --validation_epochs=1 --output_dir="DoodlePixV15" --cache_dir C:\Users\andre\Desktop\Cursor\caption\pix2pix\diffusers\examples\instruct_pix2pix\cache --val_images_dir="DoodlePixV2/val/" --validation_steps=500
+--DoodlePixV4
+accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="stable-diffusion-v1-5/stable-diffusion-v1-5" --train_data_dir="DoodlePixV4" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=8 --gradient_checkpointing --max_train_steps=20000 --checkpointing_steps=5000 --learning_rate=5e-05 --max_grad_norm=1 --lr_warmup_steps=0 --conditioning_dropout_prob=0.05 --mixed_precision=fp16 --enable_xformers_memory_efficient_attention --use_8bit_adam --seed=42 --validation_epochs=2 --output_dir="DoodlePixV4_model" --cache_dir C:\Users\andre\Desktop\Cursor\caption\pix2pix\diffusers\examples\instruct_pix2pix\cache --val_images_dir="DoodlePixV2/val/" --validation_steps=1000
+
+
+--DoodlePixV4 (post-mortem)
+accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="Lykon/dreamshaper-8" --train_data_dir="DoodlePixV4" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=8 --gradient_checkpointing --max_train_steps=15000 --learning_rate=1e-04 --max_grad_norm=1 --conditioning_dropout_prob=0.04 --mixed_precision=fp16 --enable_xformers_memory_efficient_attention --use_8bit_adam --seed=42 --random_flip --validation_epochs=2 --output_dir="DoodlePixV4_TXTGRAD" --cache_dir="cache" --val_images_dir="DoodlePixV4/val/" --validation_steps=2500 --checkpointing_steps=5000 --checkpoints_total_limit=3 --text_encoder_lr=1e-5 --lambda_reg=0.001
+
+txt encoder
+
+python train_text_encoder.py --data_path DoodlePixV4/edit_prompt --output_dir DoodlePixTxtEncoderV3
+
+
+python validate_text_encoder.py --finetuned_model "./DoodlePixTxtEncoderV2" --test_prompts "./test_prompts.txt" --output_dir "./DoodlePixTxtEncoderV2/validation_results"
+
 
 
 What do they do
