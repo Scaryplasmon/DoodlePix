@@ -1,7 +1,5 @@
 """Script to fine-tune Stable Diffusion for InstructPix2Pix."""
 
-"""The training verts around trying to teach model to generate images based on B&W doodles or drawings. so the input_image is a black background and white line drawing, the edited_image is the end result colored icon, the edit prompt is the text prompt that describes the edited image for the model to follow."""
-
 import argparse
 import logging
 import math
@@ -9,7 +7,7 @@ import os
 import shutil
 from contextlib import nullcontext
 from pathlib import Path
-import itertools
+
 import accelerate
 import datasets
 import numpy as np
@@ -39,8 +37,6 @@ from diffusers.utils.import_utils import is_xformers_available
 from diffusers.utils.torch_utils import is_compiled_module
 from datasets import Dataset, Image
 from PIL import Image as PILImage
-from peft import PeftModel
-import glob
 
 if is_wandb_available():
     import wandb
@@ -474,24 +470,6 @@ def parse_args():
     parser.add_argument(
         "--enable_xformers_memory_efficient_attention", action="store_true", default=True, help="Whether or not to use xformers."
     )
-    parser.add_argument(
-        "--text_encoder_lora_path",
-        type=str,
-        default=None,
-        help="Path to the LoRA text encoder model",
-    )
-    parser.add_argument(
-        "--text_encoder_learning_rate",
-        type=float,
-        default=1e-5,  # Usually 5-10x smaller than unet learning rate
-        help="Learning rate for text encoder fine-tuning"
-    )
-    parser.add_argument(
-        "--text_encoder_teacher_loss_weight",
-        type=float,
-        default=0.1,
-        help="Weight for teacher distillation loss"
-    )
 
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
@@ -588,29 +566,9 @@ def main():
     tokenizer = CLIPTokenizer.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
     )
-    
-    # Load the teacher text encoder (frozen copy of original)
-    teacher_text_encoder = CLIPTextModel.from_pretrained(
-        args.pretrained_model_name_or_path,
-        subfolder="text_encoder",
-        revision=args.revision,
-        variant=args.variant,
-    )
-    teacher_text_encoder.requires_grad_(False)  # Ensure it's frozen
-    teacher_text_encoder.eval()
-
-    # Regular text encoder (trainable)
     text_encoder = CLIPTextModel.from_pretrained(
-        args.pretrained_model_name_or_path,
-        subfolder="text_encoder",
-        revision=args.revision,
-        variant=args.variant,
+        args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision, variant=args.variant
     )
-    
-    # Enable gradient checkpointing for memory efficiency
-    if args.gradient_checkpointing:
-        text_encoder.gradient_checkpointing_enable()
-
     vae = AutoencoderKL.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision, variant=args.variant
     )
@@ -711,23 +669,22 @@ def main():
             args.learning_rate * args.gradient_accumulation_steps * args.train_batch_size * accelerator.num_processes
         )
 
-    # Modify the optimizer setup to include text encoder with its own learning rate:
-    params_to_optimize = [
-        {"params": unet.parameters(), "lr": args.learning_rate},
-        {"params": text_encoder.parameters(), "lr": args.text_encoder_learning_rate},
-    ]
-
+    # Initialize the optimizer
     if args.use_8bit_adam:
         try:
             import bitsandbytes as bnb
         except ImportError:
-            raise ImportError("Please install bitsandbytes to use 8-bit Adam.")
+            raise ImportError(
+                "Please install bitsandbytes to use 8-bit Adam. You can do so by running `pip install bitsandbytes`"
+            )
+
         optimizer_cls = bnb.optim.AdamW8bit
     else:
         optimizer_cls = torch.optim.AdamW
 
     optimizer = optimizer_cls(
-        params_to_optimize,
+        unet.parameters(),
+        lr=args.learning_rate,
         betas=(args.adam_beta1, args.adam_beta2),
         weight_decay=args.adam_weight_decay,
         eps=args.adam_epsilon,
@@ -996,7 +953,6 @@ def main():
 
     for epoch in range(first_epoch, args.num_train_epochs):
         unet.train()
-        text_encoder.train()  # Ensure text encoder is in training mode
         train_loss = 0.0
         for step, batch in enumerate(train_dataloader):
             # Skip steps until we reach the resumed step
@@ -1068,11 +1024,6 @@ def main():
                 model_pred = unet(concatenated_noisy_latents, timesteps, encoder_hidden_states, return_dict=False)[0]
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
-                # Add teacher distillation loss if available
-                teacher_loss = None
-                if teacher_loss is not None:
-                    loss = loss + teacher_loss
-
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
                 train_loss += avg_loss.item() / args.gradient_accumulation_steps
@@ -1080,8 +1031,7 @@ def main():
                 # Backpropagate
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
-                    params_to_clip = itertools.chain(unet.parameters(), text_encoder.parameters())
-                    accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
+                    accelerator.clip_grad_norm_(unet.parameters(), args.max_grad_norm)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
@@ -1095,37 +1045,30 @@ def main():
                 accelerator.log({"train_loss": train_loss}, step=global_step)
                 train_loss = 0.0
                 
-                if accelerator.is_main_process:
-                    if args.checkpointing_steps is not None and args.checkpointing_steps > 0 and global_step % args.checkpointing_steps == 0:
+                if global_step % args.checkpointing_steps == 0:
+                    if accelerator.is_main_process:
                         save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                         accelerator.save_state(save_path)
                         logger.info(f"Saved state to {save_path}")
 
-                        # Save the trained text encoder separately
-                        if accelerator.is_main_process:
-                            unwrapped_text_encoder = accelerator.unwrap_model(text_encoder)
-                            unwrapped_text_encoder.save_pretrained(os.path.join(save_path, "text_encoder"))
-                            logger.info(f"Saved text encoder to {save_path}/text_encoder")
-
-                        # Optionally clean up old checkpoints
+                        # Cleanup old checkpoints if needed
                         if args.checkpoints_total_limit is not None:
-                            checkpoints = os.path.join(args.output_dir, "checkpoint-*")
-                            checkpoints = sorted(glob.glob(checkpoints), key=lambda x: int(x.split("-")[-1]))
+                            checkpoints = [d for d in os.listdir(args.output_dir) if d.startswith("checkpoint")]
+                            checkpoints = sorted(checkpoints, key=lambda x: int(x.split("-")[1]))
+                            
+                            # Remove old checkpoints if limit is exceeded
                             if len(checkpoints) > args.checkpoints_total_limit:
                                 num_to_remove = len(checkpoints) - args.checkpoints_total_limit
                                 removing_checkpoints = checkpoints[0:num_to_remove]
-                                logger.info(
-                                    f"Removing old checkpoints: {', '.join(removing_checkpoints)}"
-                                )
-                                for removing_checkpoint in removing_checkpoints:
-                                    shutil.rmtree(removing_checkpoint)
+                                
+                                logger.info(f"Removing old checkpoints: {', '.join(removing_checkpoints)}")
+                                for d in removing_checkpoints:
+                                    shutil.rmtree(os.path.join(args.output_dir, d))
 
                 # Move validation check here, right after global_step is incremented
                 if accelerator.is_main_process:
                     if args.val_images_dir is not None and (
-                        (global_step == 200) or  # First validation early in training
-                        (global_step == 500) or
-                        (global_step == 800) or
+                        (global_step == 600) or  # First validation early in training
                         (global_step == 1200) or  # First validation early in training
                         (args.validation_steps > 0 and global_step % args.validation_steps == 0) or  # Regular validation during training
                         (global_step >= args.max_train_steps)  # Final validation
@@ -1143,8 +1086,6 @@ def main():
                             revision=args.revision,
                             variant=args.variant,
                             torch_dtype=weight_dtype,
-                            teacher_text_encoder=teacher_text_encoder,
-                            teacher_loss_weight=args.text_encoder_teacher_loss_weight,
                         )
                         accelerator.step = global_step  # Add this line before calling log_validation
 
@@ -1186,8 +1127,6 @@ def main():
                     revision=args.revision,
                     variant=args.variant,
                     torch_dtype=weight_dtype,
-                    teacher_text_encoder=teacher_text_encoder,
-                    teacher_loss_weight=args.text_encoder_teacher_loss_weight,
                 )
 
                 log_validation(
@@ -1209,18 +1148,11 @@ def main():
         if args.use_ema:
             ema_unet.copy_to(unet.parameters())
 
-        unet = unwrap_model(unet)
-        text_encoder = unwrap_model(text_encoder)
-
-        # Save the trained models
-        unet.save_pretrained(os.path.join(args.output_dir, "unet"))
-        text_encoder.save_pretrained(os.path.join(args.output_dir, "text_encoder"))
-
-        # Save the pipeline
         pipeline = StableDiffusionInstructPix2PixPipeline.from_pretrained(
             args.pretrained_model_name_or_path,
-            unet=unet,
-            text_encoder=text_encoder,
+            text_encoder=unwrap_model(text_encoder),
+            vae=unwrap_model(vae),
+            unet=unwrap_model(unet),
             revision=args.revision,
             variant=args.variant,
         )
@@ -1230,7 +1162,7 @@ def main():
             upload_folder(
                 repo_id=repo_id,
                 folder_path=args.output_dir,
-                commit_message=f"End of training, step: {global_step}",
+                commit_message="End of training",
                 ignore_patterns=["step_*", "epoch_*"],
             )
 

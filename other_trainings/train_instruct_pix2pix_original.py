@@ -1,6 +1,20 @@
-"""Script to fine-tune Stable Diffusion for InstructPix2Pix."""
+#!/usr/bin/env python
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
-"""The training verts around trying to teach model to generate images based on B&W doodles or drawings. so the input_image is a black background and white line drawing, the edited_image is the end result colored icon, the edit prompt is the text prompt that describes the edited image for the model to follow."""
+"""Script to fine-tune Stable Diffusion for InstructPix2Pix."""
 
 import argparse
 import logging
@@ -9,7 +23,7 @@ import os
 import shutil
 from contextlib import nullcontext
 from pathlib import Path
-import itertools
+
 import accelerate
 import datasets
 import numpy as np
@@ -39,8 +53,6 @@ from diffusers.utils.import_utils import is_xformers_available
 from diffusers.utils.torch_utils import is_compiled_module
 from datasets import Dataset, Image
 from PIL import Image as PILImage
-from peft import PeftModel
-import glob
 
 if is_wandb_available():
     import wandb
@@ -62,118 +74,57 @@ def log_validation(
     accelerator,
     generator,
 ):
-    try:
-        logger.info("Running validation...")
-        
-        # Create validation directory with epoch/step subdirectory
-        validation_dir = os.path.join(args.output_dir, "validation")
-        current_step = accelerator.step
-        step_dir = os.path.join(validation_dir, f"step_{current_step}")
-        os.makedirs(step_dir, exist_ok=True)
-        
-        pipeline = pipeline.to(accelerator.device)
-        pipeline.set_progress_bar_config(disable=True)
+    logger.info(
+        f"Running validation... \n Generating {args.num_validation_images} images with prompt:"
+        f" {args.validation_prompt}."
+    )
+    
+    # Create validation directory
+    validation_dir = os.path.join(args.output_dir, "validation")
+    os.makedirs(validation_dir, exist_ok=True)
+    
+    pipeline = pipeline.to(accelerator.device)
+    pipeline.set_progress_bar_config(disable=True)
 
-        # Get all validation images and their corresponding prompts
-        val_images_dir = args.val_images_dir  # New argument needed
-        try:
-            image_files = [f for f in os.listdir(val_images_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
-        except (FileNotFoundError, OSError) as e:
-            logger.error(f"Error accessing validation directory: {e}")
-            return
-        
-        logger.info(f"Found {len(image_files)} validation images")
-        
-        edited_images_dict = {}  # Store images for wandb logging
-        
-        if torch.backends.mps.is_available():
-            autocast_ctx = nullcontext()
-        else:
-            autocast_ctx = torch.autocast(accelerator.device.type)
+    # Load original image
+    original_image = PILImage.open(args.val_image_url)
+    
+    # Save original image
+    original_image.save(os.path.join(validation_dir, "original.png"))
+    
+    edited_images = []
+    if torch.backends.mps.is_available():
+        autocast_ctx = nullcontext()
+    else:
+        autocast_ctx = torch.autocast(accelerator.device.type)
 
-        with autocast_ctx:
-            for image_file in image_files:
-                try:
-                    base_name = os.path.splitext(image_file)[0]
-                    image_path = os.path.join(val_images_dir, image_file)
-                    prompt_path = os.path.join(val_images_dir, f"{base_name}.txt")
-                    
-                    # Skip if prompt file doesn't exist
-                    if not os.path.exists(prompt_path):
-                        logger.warning(f"Skipping {image_file} - no corresponding prompt file found")
-                        continue
-                        
-                    # Read prompt
-                    with open(prompt_path, 'r', encoding='utf-8') as f:
-                        validation_prompt = f.read().strip()
-                        
-                    # Load and process original image
-                    original_image = PILImage.open(image_path).convert("RGB")
-                    
-                    # Save original image
-                    try:
-                        original_image.save(os.path.join(step_dir, f"original_{base_name}.png"))
-                    except Exception as e:
-                        logger.error(f"Failed to save original image {base_name}: {e}")
-                        continue
-                    
-                    # Generate edited images
-                    edited_images = []
-                    for idx in range(args.num_validation_images):
-                        try:
-                            edited_image = pipeline(
-                                validation_prompt,
-                                negative_prompt="NSFW, nudity, bad, blurry, sex, photorealistic",
-                                image=original_image,
-                                num_inference_steps=24,
-                                image_guidance_scale=1.5,
-                                guidance_scale=6.0,
-                                generator=generator,
-                            ).images[0]
-                            
-                            # Save edited image
-                            edited_image.save(os.path.join(step_dir, f"edited_{base_name}_{idx}.png"))
-                            edited_images.append(edited_image)
-                            
-                            # Save prompt
-                            with open(os.path.join(step_dir, f"prompt_{base_name}_{idx}.txt"), "w") as f:
-                                f.write(validation_prompt)
-                                
-                        except Exception as e:
-                            logger.error(f"Failed to generate/save edited image {base_name}_{idx}: {e}")
-                            continue
-                    
-                    if edited_images:  # Only add to dict if we have successful edits
-                        edited_images_dict[base_name] = {
-                            "original": original_image,
-                            "edited": edited_images,
-                            "prompt": validation_prompt
-                        }
-                        
-                except Exception as e:
-                    logger.error(f"Failed to process validation image {image_file}: {e}")
-                    continue
-
-        # Log to wandb if enabled
-        try:
-            for tracker in accelerator.trackers:
-                if tracker.name == "wandb":
-                    wandb_table = wandb.Table(columns=WANDB_TABLE_COL_NAMES)
-                    for base_name, data in edited_images_dict.items():
-                        for edited_image in data["edited"]:
-                            wandb_table.add_data(
-                                wandb.Image(data["original"]),
-                                wandb.Image(edited_image),
-                                data["prompt"]
-                            )
-                    tracker.log({"validation": wandb_table})
-        except Exception as e:
-            logger.error(f"Failed to log to wandb: {e}")
+    with autocast_ctx:
+        for idx in range(args.num_validation_images):
+            edited_image = pipeline(
+                args.validation_prompt,
+                negative_prompt="NSFW, nudity, bad, blurry, sex, photorealistic",
+                image=original_image,
+                num_inference_steps=24,
+                image_guidance_scale=1.5,
+                guidance_scale=6.0,
+                generator=generator,
+            ).images[0]
             
-    except Exception as e:
-        logger.error(f"Validation failed with error: {e}")
-        logger.info("Continuing training despite validation failure")
+            # Save each edited image
+            edited_image.save(os.path.join(validation_dir, f"edited_{idx}.png"))
+            edited_images.append(edited_image)
+            
+            # Save prompt in a text file
+            with open(os.path.join(validation_dir, f"prompt_{idx}.txt"), "w") as f:
+                f.write(args.validation_prompt)
 
+    # Still log to wandb if it's enabled
+    for tracker in accelerator.trackers:
+        if tracker.name == "wandb":
+            wandb_table = wandb.Table(columns=WANDB_TABLE_COL_NAMES)
+            for edited_image in edited_images:
+                wandb_table.add_data(wandb.Image(original_image), wandb.Image(edited_image), args.validation_prompt)
+            tracker.log({"validation": wandb_table})
 
 
 def parse_args():
@@ -184,12 +135,6 @@ def parse_args():
         default=None,
         required=True,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
-    )
-    parser.add_argument(
-        "--val_images_dir",
-        type=str,
-        default="validation_images",
-        help="Directory containing validation images and their corresponding prompt files",
     )
     parser.add_argument(
         "--revision",
@@ -260,7 +205,7 @@ def parse_args():
     parser.add_argument(
         "--num_validation_images",
         type=int,
-        default=1,
+        default=2,
         help="Number of images that should be generated during validation with `validation_prompt`.",
     )
     parser.add_argument(
@@ -466,31 +411,7 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--validation_steps",
-        type=int,
-        default=5000,
-        help="Run validation every X steps. Set to -1 to disable during training and only run at the end.",
-    )
-    parser.add_argument(
-        "--enable_xformers_memory_efficient_attention", action="store_true", default=True, help="Whether or not to use xformers."
-    )
-    parser.add_argument(
-        "--text_encoder_lora_path",
-        type=str,
-        default=None,
-        help="Path to the LoRA text encoder model",
-    )
-    parser.add_argument(
-        "--text_encoder_learning_rate",
-        type=float,
-        default=1e-5,  # Usually 5-10x smaller than unet learning rate
-        help="Learning rate for text encoder fine-tuning"
-    )
-    parser.add_argument(
-        "--text_encoder_teacher_loss_weight",
-        type=float,
-        default=0.1,
-        help="Weight for teacher distillation loss"
+        "--enable_xformers_memory_efficient_attention", action="store_true", help="Whether or not to use xformers."
     )
 
     args = parser.parse_args()
@@ -588,29 +509,9 @@ def main():
     tokenizer = CLIPTokenizer.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
     )
-    
-    # Load the teacher text encoder (frozen copy of original)
-    teacher_text_encoder = CLIPTextModel.from_pretrained(
-        args.pretrained_model_name_or_path,
-        subfolder="text_encoder",
-        revision=args.revision,
-        variant=args.variant,
-    )
-    teacher_text_encoder.requires_grad_(False)  # Ensure it's frozen
-    teacher_text_encoder.eval()
-
-    # Regular text encoder (trainable)
     text_encoder = CLIPTextModel.from_pretrained(
-        args.pretrained_model_name_or_path,
-        subfolder="text_encoder",
-        revision=args.revision,
-        variant=args.variant,
+        args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision, variant=args.variant
     )
-    
-    # Enable gradient checkpointing for memory efficiency
-    if args.gradient_checkpointing:
-        text_encoder.gradient_checkpointing_enable()
-
     vae = AutoencoderKL.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision, variant=args.variant
     )
@@ -711,23 +612,22 @@ def main():
             args.learning_rate * args.gradient_accumulation_steps * args.train_batch_size * accelerator.num_processes
         )
 
-    # Modify the optimizer setup to include text encoder with its own learning rate:
-    params_to_optimize = [
-        {"params": unet.parameters(), "lr": args.learning_rate},
-        {"params": text_encoder.parameters(), "lr": args.text_encoder_learning_rate},
-    ]
-
+    # Initialize the optimizer
     if args.use_8bit_adam:
         try:
             import bitsandbytes as bnb
         except ImportError:
-            raise ImportError("Please install bitsandbytes to use 8-bit Adam.")
+            raise ImportError(
+                "Please install bitsandbytes to use 8-bit Adam. You can do so by running `pip install bitsandbytes`"
+            )
+
         optimizer_cls = bnb.optim.AdamW8bit
     else:
         optimizer_cls = torch.optim.AdamW
 
     optimizer = optimizer_cls(
-        params_to_optimize,
+        unet.parameters(),
+        lr=args.learning_rate,
         betas=(args.adam_beta1, args.adam_beta2),
         weight_decay=args.adam_weight_decay,
         eps=args.adam_epsilon,
@@ -767,7 +667,11 @@ def main():
         
         return dataset
 
+    # Get the datasets: you can either provide your own training and evaluation files (see below)
+    # or specify a Dataset from the hub (the dataset will be downloaded automatically from the datasets Hub).
 
+    # In distributed training, the load_dataset function guarantees that only one local process can concurrently
+    # download the dataset.
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
         dataset = load_dataset(
@@ -996,7 +900,6 @@ def main():
 
     for epoch in range(first_epoch, args.num_train_epochs):
         unet.train()
-        text_encoder.train()  # Ensure text encoder is in training mode
         train_loss = 0.0
         for step, batch in enumerate(train_dataloader):
             # Skip steps until we reach the resumed step
@@ -1004,8 +907,6 @@ def main():
                 if step % args.gradient_accumulation_steps == 0:
                     progress_bar.update(1)
                 continue
-            
-            
 
             with accelerator.accumulate(unet):
                 # We want to learn the denoising process w.r.t the edited images which
@@ -1068,11 +969,6 @@ def main():
                 model_pred = unet(concatenated_noisy_latents, timesteps, encoder_hidden_states, return_dict=False)[0]
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
-                # Add teacher distillation loss if available
-                teacher_loss = None
-                if teacher_loss is not None:
-                    loss = loss + teacher_loss
-
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
                 train_loss += avg_loss.item() / args.gradient_accumulation_steps
@@ -1080,8 +976,7 @@ def main():
                 # Backpropagate
                 accelerator.backward(loss)
                 if accelerator.sync_gradients:
-                    params_to_clip = itertools.chain(unet.parameters(), text_encoder.parameters())
-                    accelerator.clip_grad_norm_(params_to_clip, args.max_grad_norm)
+                    accelerator.clip_grad_norm_(unet.parameters(), args.max_grad_norm)
                 optimizer.step()
                 lr_scheduler.step()
                 optimizer.zero_grad()
@@ -1094,72 +989,32 @@ def main():
                 global_step += 1
                 accelerator.log({"train_loss": train_loss}, step=global_step)
                 train_loss = 0.0
-                
-                if accelerator.is_main_process:
-                    if args.checkpointing_steps is not None and args.checkpointing_steps > 0 and global_step % args.checkpointing_steps == 0:
+
+                if global_step % args.checkpointing_steps == 0:
+                    if accelerator.is_main_process:
+                        # _before_ saving state, check if this save would set us over the `checkpoints_total_limit`
+                        if args.checkpoints_total_limit is not None:
+                            checkpoints = os.listdir(args.output_dir)
+                            checkpoints = [d for d in checkpoints if d.startswith("checkpoint")]
+                            checkpoints = sorted(checkpoints, key=lambda x: int(x.split("-")[1]))
+
+                            # before we save the new checkpoint, we need to have at _most_ `checkpoints_total_limit - 1` checkpoints
+                            if len(checkpoints) >= args.checkpoints_total_limit:
+                                num_to_remove = len(checkpoints) - args.checkpoints_total_limit + 1
+                                removing_checkpoints = checkpoints[0:num_to_remove]
+
+                                logger.info(
+                                    f"{len(checkpoints)} checkpoints already exist, removing {len(removing_checkpoints)} checkpoints"
+                                )
+                                logger.info(f"removing checkpoints: {', '.join(removing_checkpoints)}")
+
+                                for removing_checkpoint in removing_checkpoints:
+                                    removing_checkpoint = os.path.join(args.output_dir, removing_checkpoint)
+                                    shutil.rmtree(removing_checkpoint)
+
                         save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                         accelerator.save_state(save_path)
                         logger.info(f"Saved state to {save_path}")
-
-                        # Save the trained text encoder separately
-                        if accelerator.is_main_process:
-                            unwrapped_text_encoder = accelerator.unwrap_model(text_encoder)
-                            unwrapped_text_encoder.save_pretrained(os.path.join(save_path, "text_encoder"))
-                            logger.info(f"Saved text encoder to {save_path}/text_encoder")
-
-                        # Optionally clean up old checkpoints
-                        if args.checkpoints_total_limit is not None:
-                            checkpoints = os.path.join(args.output_dir, "checkpoint-*")
-                            checkpoints = sorted(glob.glob(checkpoints), key=lambda x: int(x.split("-")[-1]))
-                            if len(checkpoints) > args.checkpoints_total_limit:
-                                num_to_remove = len(checkpoints) - args.checkpoints_total_limit
-                                removing_checkpoints = checkpoints[0:num_to_remove]
-                                logger.info(
-                                    f"Removing old checkpoints: {', '.join(removing_checkpoints)}"
-                                )
-                                for removing_checkpoint in removing_checkpoints:
-                                    shutil.rmtree(removing_checkpoint)
-
-                # Move validation check here, right after global_step is incremented
-                if accelerator.is_main_process:
-                    if args.val_images_dir is not None and (
-                        (global_step == 200) or  # First validation early in training
-                        (global_step == 500) or
-                        (global_step == 800) or
-                        (global_step == 1200) or  # First validation early in training
-                        (args.validation_steps > 0 and global_step % args.validation_steps == 0) or  # Regular validation during training
-                        (global_step >= args.max_train_steps)  # Final validation
-                    ):
-                        logger.info(f"Running validation at step {global_step}")
-                        if args.use_ema:
-                            ema_unet.store(unet.parameters())
-                            ema_unet.copy_to(unet.parameters())
-                            
-                        pipeline = StableDiffusionInstructPix2PixPipeline.from_pretrained(
-                            args.pretrained_model_name_or_path,
-                            unet=unwrap_model(unet),
-                            text_encoder=unwrap_model(text_encoder),
-                            vae=unwrap_model(vae),
-                            revision=args.revision,
-                            variant=args.variant,
-                            torch_dtype=weight_dtype,
-                            teacher_text_encoder=teacher_text_encoder,
-                            teacher_loss_weight=args.text_encoder_teacher_loss_weight,
-                        )
-                        accelerator.step = global_step  # Add this line before calling log_validation
-
-                        log_validation(
-                            pipeline,
-                            args,
-                            accelerator,
-                            generator,
-                        )
-
-                        if args.use_ema:
-                            ema_unet.restore(unet.parameters())
-
-                        del pipeline
-                        torch.cuda.empty_cache()
 
             logs = {"step_loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
             progress_bar.set_postfix(**logs)
@@ -1168,16 +1023,16 @@ def main():
                 break
 
         if accelerator.is_main_process:
-            if args.val_images_dir is not None and (
-                (global_step == 10) or  # First validation early in training
-                (args.validation_steps > 0 and global_step % args.validation_steps == 0) or  # Regular validation during training
-                (global_step >= args.max_train_steps)  # Final validation
+            if (
+                (args.val_image_url is not None)
+                and (args.validation_prompt is not None)
+                and (epoch % args.validation_epochs == 0)
             ):
-                logger.info(f"Running validation at step {global_step}")
                 if args.use_ema:
+                    # Store the UNet parameters temporarily and load the EMA parameters to perform inference.
                     ema_unet.store(unet.parameters())
                     ema_unet.copy_to(unet.parameters())
-                    
+                # The models need unwrapping because for compatibility in distributed training mode.
                 pipeline = StableDiffusionInstructPix2PixPipeline.from_pretrained(
                     args.pretrained_model_name_or_path,
                     unet=unwrap_model(unet),
@@ -1186,8 +1041,6 @@ def main():
                     revision=args.revision,
                     variant=args.variant,
                     torch_dtype=weight_dtype,
-                    teacher_text_encoder=teacher_text_encoder,
-                    teacher_loss_weight=args.text_encoder_teacher_loss_weight,
                 )
 
                 log_validation(
@@ -1198,6 +1051,7 @@ def main():
                 )
 
                 if args.use_ema:
+                    # Switch back to the original UNet parameters.
                     ema_unet.restore(unet.parameters())
 
                 del pipeline
@@ -1209,18 +1063,11 @@ def main():
         if args.use_ema:
             ema_unet.copy_to(unet.parameters())
 
-        unet = unwrap_model(unet)
-        text_encoder = unwrap_model(text_encoder)
-
-        # Save the trained models
-        unet.save_pretrained(os.path.join(args.output_dir, "unet"))
-        text_encoder.save_pretrained(os.path.join(args.output_dir, "text_encoder"))
-
-        # Save the pipeline
         pipeline = StableDiffusionInstructPix2PixPipeline.from_pretrained(
             args.pretrained_model_name_or_path,
-            unet=unet,
-            text_encoder=text_encoder,
+            text_encoder=unwrap_model(text_encoder),
+            vae=unwrap_model(vae),
+            unet=unwrap_model(unet),
             revision=args.revision,
             variant=args.variant,
         )
@@ -1230,7 +1077,7 @@ def main():
             upload_folder(
                 repo_id=repo_id,
                 folder_path=args.output_dir,
-                commit_message=f"End of training, step: {global_step}",
+                commit_message="End of training",
                 ignore_patterns=["step_*", "epoch_*"],
             )
 
