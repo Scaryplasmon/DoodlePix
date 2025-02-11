@@ -497,13 +497,6 @@ def convert_to_np(image, resolution):
     return np.array(image).transpose(2, 0, 1)
 
 
-def download_image(url):
-    image = PIL.Image.open(requests.get(url, stream=True).raw)
-    image = PIL.ImageOps.exif_transpose(image)
-    image = image.convert("RGB")
-    return image
-
-
 def load_image_dataset(source_dir):
     # Get all image files
     input_dir = os.path.join(source_dir, "input_image")
@@ -565,6 +558,7 @@ def main():
 
     # Load dataset
     dataset = load_image_dataset(args.train_data_dir)
+    print(f"\nDataset loaded: {len(dataset)} images")
     
     # Create transforms
     train_transforms = transforms.Compose([
@@ -575,9 +569,8 @@ def main():
     ])
 
     def preprocess_train(examples):
-        # The images are already PIL images from the dataset
-        images = [train_transforms(example) for example in examples["input_image"]]
-        edited_images = [train_transforms(example) for example in examples["edited_image"]]
+        images = [train_transforms(image) for image in examples["input_image"]]
+        edited_images = [train_transforms(image) for image in examples["edited_image"]]
         
         # Tokenize prompts
         input_ids = tokenizer(
@@ -594,17 +587,31 @@ def main():
             "input_ids": input_ids,
         }
 
-    # Create train dataset
+    # Create train dataset with transforms
     train_dataset = dataset.with_transform(preprocess_train)
-
-    # Create dataloader
+    
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
-        shuffle=True,
         batch_size=args.train_batch_size,
+        shuffle=True,
         num_workers=args.dataloader_num_workers,
     )
-
+    print(f"Number of batches per epoch: {len(train_dataloader)}")
+    print(f"Gradient accumulation steps: {args.gradient_accumulation_steps}")
+    print(f"Effective batch size: {args.train_batch_size * args.gradient_accumulation_steps}")
+    
+    # Calculate steps
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    max_train_steps = args.max_train_steps
+    logger.info(f"Steps per epoch: {num_update_steps_per_epoch}")
+    logger.info(f"Total steps requested: {max_train_steps}")
+    
+    # Before training loop
+    print(f"\nTraining config:")
+    print(f"max_train_steps: {max_train_steps}")
+    print(f"num_train_epochs: {args.num_train_epochs}")
+    print(f"Steps per epoch: {num_update_steps_per_epoch}")
+    
     # Configure LoRA for UNet - target the key layers for style transfer
     unet_lora_config = LoraConfig(
         r=args.lora_rank,
@@ -650,81 +657,83 @@ def main():
         unet, optimizer, train_dataloader, lr_scheduler
     )
 
-    # Training loop
+    progress_bar = tqdm(range(max_train_steps), disable=not accelerator.is_local_main_process)
     global_step = 0
-    progress_bar = tqdm(range(args.max_train_steps), disable=not accelerator.is_local_main_process)
 
+    # Training loop
     for epoch in range(args.num_train_epochs):
+        print(f"\n{'='*20} Epoch {epoch} {'='*20}")
         unet.train()
-        
         for step, batch in enumerate(train_dataloader):
-            try:
-                with accelerator.accumulate(unet):
-                    # Clear GPU cache periodically
-                    if step % 100 == 0:
-                        torch.cuda.empty_cache()
+            print(f"Epoch: {epoch}, Batch: {step}, Global step: {global_step}", end='\r')
+            
+            with accelerator.accumulate(unet):
+                # Clear GPU cache periodically
+                if step % 100 == 0:
+                    torch.cuda.empty_cache()
 
-                    # Convert images to latent space
-                    with torch.no_grad():
-                        latents = vae.encode(batch["pixel_values"].to(dtype=torch.float16)).latent_dist.sample()
-                        latents = latents * vae.config.scaling_factor
+                # Convert images to latent space
+                with torch.no_grad():
+                    latents = vae.encode(batch["pixel_values"].to(dtype=torch.float16)).latent_dist.sample()
+                    latents = latents * vae.config.scaling_factor
 
-                        edited_latents = vae.encode(batch["edited_pixel_values"].to(dtype=torch.float16)).latent_dist.sample()
-                        edited_latents = edited_latents * vae.config.scaling_factor
+                    edited_latents = vae.encode(batch["edited_pixel_values"].to(dtype=torch.float16)).latent_dist.sample()
+                    edited_latents = edited_latents * vae.config.scaling_factor
 
-                    # Add noise
-                    noise = torch.randn_like(edited_latents)
-                    timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (latents.shape[0],), device=latents.device)
-                    noisy_latents = noise_scheduler.add_noise(edited_latents, noise, timesteps)
+                # Add noise
+                noise = torch.randn_like(edited_latents)
+                timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (latents.shape[0],), device=latents.device)
+                noisy_latents = noise_scheduler.add_noise(edited_latents, noise, timesteps)
 
-                    # Prepare input
-                    model_input = torch.cat([latents, noisy_latents], dim=1)
+                # Prepare input
+                model_input = torch.cat([latents, noisy_latents], dim=1)
 
-                    # Get text embeddings
-                    with torch.no_grad():
-                        encoder_hidden_states = text_encoder(batch["input_ids"])[0]
+                # Get text embeddings
+                with torch.no_grad():
+                    encoder_hidden_states = text_encoder(batch["input_ids"])[0]
 
-                    # Predict noise residual
-                    model_pred = unet(model_input, timesteps, encoder_hidden_states).sample
+                # Predict noise residual
+                model_pred = unet(model_input, timesteps, encoder_hidden_states).sample
 
-                    # Calculate loss
-                    target = noise
-                    loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+                # Calculate loss
+                target = noise
+                loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
-                    # Backpropagate
-                    accelerator.backward(loss)
-                    
-                    # Clip gradients
-                    if accelerator.sync_gradients:
-                        accelerator.clip_grad_norm_(unet.parameters(), 1.0)
-                    
-                    optimizer.step()
-                    lr_scheduler.step()
-                    optimizer.zero_grad()
-
+                # Backpropagate
+                accelerator.backward(loss)
+                
+                # Clip gradients
                 if accelerator.sync_gradients:
-                    progress_bar.update(1)
-                    global_step += 1
+                    accelerator.clip_grad_norm_(unet.parameters(), 1.0)
+                
+                optimizer.step()
+                lr_scheduler.step()
+                optimizer.zero_grad()
 
-                # Log validation
+            if accelerator.sync_gradients:
+                progress_bar.update(1)
+                global_step += 1
+
+                # Add back validation
                 if global_step % args.validation_steps == 0:
                     log_validation(unet, pipeline, args, accelerator, global_step)
 
-                if global_step >= args.max_train_steps:
+                if global_step >= max_train_steps:
+                    print(f"\nReached max_train_steps ({max_train_steps})")
                     break
 
-            except Exception as e:
-                logger.error(f"Error during training step: {e}")
-                torch.cuda.empty_cache()
-                continue
+        if global_step >= max_train_steps:
+            break
 
     # Save final LoRA weights
     if accelerator.is_main_process:
         unet = accelerator.unwrap_model(unet)
-        torch.save(
-            unet.state_dict(),
-            os.path.join(args.output_dir, "final_lora_weights.safetensors")
-        )
+        # Save only LoRA weights
+        lora_state_dict = {}
+        for key, value in unet.state_dict().items():
+            if 'lora_' in key:
+                lora_state_dict[key] = value
+        torch.save(lora_state_dict, os.path.join(args.output_dir, "final_lora_weights.safetensors"))
 
     accelerator.end_training()
 
