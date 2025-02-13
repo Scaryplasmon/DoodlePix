@@ -60,59 +60,65 @@ def log_validation(unet, pipeline, args, accelerator, global_step):
     logger.info("Running validation...")
     
     if accelerator.is_main_process:
-        # Save the current LoRA weights
-        unwrapped_unet = accelerator.unwrap_model(unet)
-        lora_state_dict = unwrapped_unet.state_dict()
-        os.makedirs(f"{args.output_dir}/checkpoint-{global_step}", exist_ok=True)
-        torch.save(lora_state_dict, f"{args.output_dir}/checkpoint-{global_step}/lora_weights.safetensors")
-
-        # Create a fresh pipeline and load the saved LoRA weights
-        validation_pipeline = StableDiffusionInstructPix2PixPipeline.from_pretrained(
-            args.pretrained_model_name_or_path,
-            torch_dtype=torch.float16,
-            safety_checker=None,
-        ).to(accelerator.device)
-        
         try:
-            # Get the trained UNet with LoRA and fuse the weights
-            unwrapped_unet = accelerator.unwrap_model(unet)
-            validation_pipeline.unet = unwrapped_unet
-            validation_pipeline.unet.fuse_lora()
+            # Create a fresh pipeline for validation using the original components.
+            validation_pipeline = StableDiffusionInstructPix2PixPipeline(
+                vae=pipeline.vae,
+                text_encoder=pipeline.text_encoder,
+                tokenizer=pipeline.tokenizer,
+                unet=accelerator.unwrap_model(unet),  # Use the trained (PEFT-modified) UNet as is
+                scheduler=pipeline.scheduler,
+                safety_checker=None,
+                feature_extractor=None,
+            ).to(accelerator.device)
             
-            # Run validation
-            validation_dir = os.path.join(args.train_data_dir, "validation")
+            # Remove fusion: do NOT call validation_pipeline.unet.fuse_lora()
+            validation_pipeline.unet.eval()
+            
+            validation_dir = os.path.join(args.train_data_dir, "val")
             if os.path.exists(validation_dir):
-                for img_file in os.listdir(os.path.join(validation_dir, "input_image")):
+                for img_file in os.listdir(validation_dir):
                     if not img_file.endswith(('.png', '.jpg', '.jpeg')):
                         continue
-                        
-                    base_name = os.path.splitext(img_file)[0]
-                    input_path = os.path.join(validation_dir, "input_image", img_file)
-                    prompt_path = os.path.join(validation_dir, "edit_prompt", f"{base_name}.txt")
                     
-                    # Load validation image and prompt
+                    base_name = os.path.splitext(img_file)[0]
+                    input_path = os.path.join(validation_dir, img_file)
+                    prompt_path = os.path.join(validation_dir, f"{base_name}.txt")
+                    
                     init_image = PILImage.open(input_path).convert("RGB")
+                    init_image = init_image.resize((args.resolution, args.resolution))
+                    
                     with open(prompt_path, 'r', encoding='utf-8') as f:
                         prompt = f.read().strip()
 
-                    # Run inference
-                    image = validation_pipeline(
-                        prompt=prompt,
-                        image=init_image,
-                        num_inference_steps=20,
-                        image_guidance_scale=1.5,
-                        guidance_scale=7,
-                        generator=torch.Generator(device=accelerator.device).manual_seed(42)
-                    ).images[0]
+                    try:
+                        print(f"\nRunning inference on {base_name} with prompt: {prompt}")
+                        
+                        result = validation_pipeline(
+                            prompt=prompt,
+                            image=init_image,
+                            num_inference_steps=20,
+                            image_guidance_scale=1.5,
+                            guidance_scale=7,
+                            generator=torch.Generator(device=accelerator.device).manual_seed(42)
+                        )
+                        
+                        image = result.images[0]
+                        
+                        output_dir = os.path.join(args.output_dir, "validation_outputs", f"step_{global_step}")
+                        os.makedirs(output_dir, exist_ok=True)
+                        output_path = os.path.join(output_dir, f"{base_name}_output.png")
+                        image.save(output_path)
+                        print(f"Saved output to: {output_path}")
+                        
+                    except Exception as e:
+                        print(f"Error during inference on {base_name}: {str(e)}")
 
-                    # Save output
-                    os.makedirs(os.path.join(args.output_dir, "validation_outputs", f"step_{global_step}"), exist_ok=True)
-                    image.save(os.path.join(args.output_dir, "validation_outputs", f"step_{global_step}", f"{base_name}_output.png"))
-
+        except Exception as e:
+            print(f"Error in validation setup: {str(e)}")
+            
         finally:
-            # Unfuse LoRA weights after validation
-            if hasattr(validation_pipeline.unet, "unfuse_lora"):
-                validation_pipeline.unet.unfuse_lora()
+            validation_pipeline.unet.train()
             del validation_pipeline
             torch.cuda.empty_cache()
 

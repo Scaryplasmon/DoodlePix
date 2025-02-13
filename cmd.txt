@@ -28,9 +28,13 @@ accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretraine
 
 LORA training
 
-python train_DoodlePix_Lora.py --pretrained_model_name_or_path="models/DoodlePixV4_TXTGRAD" --train_data_dir="DoodlePixV4/lora_cute" --output_dir="models/doodlepix_style_lora" --num_train_epochs=10 --train_batch_size=1 --gradient_accumulation_steps=4 --learning_rate=2e-4 --text_encoder_learning_rate=5e-5 --lora_rank=4 --resolution=512 --validation_steps=200 --style_name="whimsy" --val_images_dir="DoodlePixV4/lora_cute/val/"
+python train_DoodlePix_Lora.py --pretrained_model_name_or_path="models/DoodlePixV4_TXTGRAD" --train_data_dir="DoodlePixV4/lora_cute" --output_dir="models/doodlepix_style_lora" --num_train_epochs=10 --train_batch_size=1 --gradient_accumulation_steps=4 --learning_rate=2e-4 --text_encoder_learning_rate=5e-5 --lora_rank=4 --resolution=512 --validation_steps=10 --style_name="whimsy" --val_images_dir="DoodlePixV4/lora_cute/val/"
 
+TXTEmbed
+python train_DoodlePix_embeddings.py --pretrained_model_name_or_path models/DoodlePixV4_TXTGRAD --train_data_dir "DoodlePixV4/emb_cute/edited_image" --output_dir "models/cute_style_model" --resolution 512 --num_train_steps 3000 --learning_rate 5e-5 --style_token "<cute-style>" --initializer_token "cute" --validate_every 100 --style_conditioning_scale 5.0 --style_scale 4.0 --style_token_repeats 5
 
+IPAdapter
+python train_DoodlePixIPAdapter.py --pretrained_model_name_or_path="models/DoodlePixV4_TXTGRAD" --train_data_dir="DoodlePixV4/ipFood" --output_dir="models/ip_adapter_model" --train_batch_size=1 --num_train_epochs=200 --learning_rate=1e-4 --resolution=512 --validate_every=200 --mixed_precision="fp16" --gradient_accumulation_steps=2
 
 
 

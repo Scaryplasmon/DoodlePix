@@ -50,7 +50,8 @@ def batch_analyze_prompts(directory):
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description='Analyze token counts in prompt files')
-    parser.add_argument('directory', help='Directory containing .txt prompt files')
+    # parser.add_argument('directory', help='Directory containing .txt prompt files', default="countTokens")
     args = parser.parse_args()
+    directory = "countTokens"
     
-    batch_analyze_prompts(args.directory)
+    batch_analyze_prompts(directory)
