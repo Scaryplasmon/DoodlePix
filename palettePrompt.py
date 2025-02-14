@@ -108,15 +108,26 @@ def extract_palette(image_path, default_k, lab_threshold, min_colors, max_colors
     Returns a tuple (palette_colors, bg_hex) where palette_colors is a list of hex codes and bg_hex is the
     background hex code.
     """
-    # Open image in RGB
-    orig_image = Image.open(image_path).convert("RGB")
+    # Open image and ensure it's in RGB format
+    try:
+        orig_image = Image.open(image_path)
+        if orig_image.mode != "RGB":
+            orig_image = orig_image.convert("RGB")
+    except Exception as e:
+        print(f"Error opening image {image_path}: {e}")
+        return [], None
+
     orig_np = np.array(orig_image)  # (H, W, 3)
     H, W, _ = orig_np.shape
     
     # Remove background with rembg (get RGBA)
-    result_image = remove(orig_image)
-    result_image = result_image.convert("RGBA")
-    result_np = np.array(result_image)  # (H, W, 4)
+    try:
+        result_image = remove(orig_image)
+        result_image = result_image.convert("RGBA")
+        result_np = np.array(result_image)  # (H, W, 4)
+    except Exception as e:
+        print(f"Error removing background from {image_path}: {e}")
+        return [], None
     
     # Extract alpha channel
     alpha = result_np[:, :, 3]
@@ -153,9 +164,15 @@ def extract_palette(image_path, default_k, lab_threshold, min_colors, max_colors
         # Merge clusters that are too close (but do not merge below min_colors)
         merged_centers, merged_counts = merge_similar_clusters(centers, counts, lab_threshold, min_colors)
         
-        # If after merging we have more than max_colors, merge the smallest pair until we have max_colors
+        # If after merging we have more than max_colors, attempt to merge further until we have max_colors.
+        # Note: if no further merges are possible (clusters are noticeably distinct),
+        # break out to avoid an infinite loop.
         while len(merged_centers) > max_colors:
+            prev_count = len(merged_centers)
             merged_centers, merged_counts = merge_similar_clusters(merged_centers, merged_counts, lab_threshold, len(merged_centers)-1)
+            if len(merged_centers) == prev_count:
+                print("Warning: Unable to merge clusters further to reach max_colors for image", image_path)
+                break
         
         # Now sort merged clusters by counts (most prevalent first)
         sorted_indices = np.argsort(-np.array(merged_counts))
@@ -196,15 +213,15 @@ def process_folder(input_dir, output_dir, default_k, lab_threshold, min_colors, 
 
 def main():
     """comand example
-        python palettePrompt.py -i DoodlePixV4/DoodlePixV5/A_3D/ -o DoodlePixV4/DoodlePixV5/A_3D/colors/
+        python palettePrompt.py -i DoodlePixV4/DoodlePixV5/A_outline/ -o DoodlePixV4/DoodlePixV5/A_outline/colors/
     """
     parser = argparse.ArgumentParser(description="Extract color palettes from images with dynamic merging.")
     parser.add_argument("--input_dir","-i", type=str, required=True, help="Path to the input folder with images.")
     parser.add_argument("--output_dir","-o", type=str, required=True, help="Path to the folder where palette txt files will be saved.")
-    parser.add_argument("--default_k","-k", type=int, default=8, help="Initial number of clusters for KMeans on foreground pixels.")
-    parser.add_argument("--lab_threshold","-t", type=float, default=80.0, help="Minimum LAB distance to consider two colors distinct.")
-    parser.add_argument("--min_colors","-m", type=int, default=2, help="Minimum number of foreground colors in the palette.")
-    parser.add_argument("--max_colors","-M", type=int, default=6, help="Maximum number of foreground colors in the palette.")
+    parser.add_argument("--default_k","-k", type=int, default=12, help="Initial number of clusters for KMeans on foreground pixels.")
+    parser.add_argument("--lab_threshold","-t", type=float, default=60.0, help="Minimum LAB distance to consider two colors distinct.")
+    parser.add_argument("--min_colors","-m", type=int, default=1, help="Minimum number of foreground colors in the palette.")
+    parser.add_argument("--max_colors","-M", type=int, default=7, help="Maximum number of foreground colors in the palette.")
     parser.add_argument("--bg_alpha_thresh","-b", type=int, default=128, help="Alpha threshold (0-255) to define background.")
     args = parser.parse_args()
     

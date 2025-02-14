@@ -13,6 +13,9 @@ _tris for rotatation and scale crop changes
 
 - [x] change hue of images (white bg and call them bis to correctly learn color changes of same subject)
 - [ ] resize images an save them as tris
+- [x] HEX Colors NEW (dalleNew - A_outline - A_flat - edited_image - A_3D - )
+- [x] Canny with various fidelity values
+- [ ] sort Canny after renaming (add <f=x> in front of the name. when copying the images we remove the f=x and we save it as individual txt file in another folder)
 - [ ] Halo? Tag?
 - [ ] f = fidelity, (0-10) HED f = 9, Canny f = 10, Scribble f = 3, Other Scribble f = 7
 - [ ] p = shading, (flat, painted, 3D)
