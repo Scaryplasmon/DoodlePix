@@ -8,14 +8,10 @@ from tqdm import tqdm
 
 def setup_argparse() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description='Copy random images from multiple folders')
-    parser.add_argument('--input_folder', type=str, required=True,
+    parser.add_argument('--input_folder',"-i", type=str, required=True,
                        help='Root folder containing subfolders with images')
-    parser.add_argument('--output_folder', type=str, required=True,
+    parser.add_argument('--output_folder', "-o", type=str, required=True,
                        help='Destination folder for copied images')
-    parser.add_argument('--base_images', type=int, default=50,
-                       help='Base number of images to select from first folder')
-    parser.add_argument('--increment', type=int, default=25,
-                       help='Increment in number of images for each subsequent folder')
     return parser.parse_args()
 
 def get_image_files(folder: str) -> List[str]:
@@ -136,3 +132,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
+    
+    """python sortDrawings.py -i C:/Users/andre/Documents/ComfyUI/output/edges_DoodlePixV5/A_flat/ -o DoodlePixV4/DoodlePixV5/fid_edges/A_flat/
+    """

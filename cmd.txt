@@ -20,11 +20,14 @@ accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretraine
 
 
 --DoodlePixV4 (post-mortem)
-accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="Lykon/dreamshaper-8" --train_data_dir="DoodlePixV4" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=8 --gradient_checkpointing --max_train_steps=15000 --learning_rate=1e-04 --max_grad_norm=1 --conditioning_dropout_prob=0.04 --mixed_precision=fp16 --enable_xformers_memory_efficient_attention --use_8bit_adam --seed=42 --random_flip --validation_epochs=2 --output_dir="DoodlePixV4_TXTGRAD" --cache_dir="cache" --val_images_dir="DoodlePixV4/val/" --validation_steps=2500 --checkpointing_steps=5000 --checkpoints_total_limit=3 --text_encoder_lr=1e-5 --lambda_reg=0.001
+accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="Lykon/dreamshaper-8" --train_data_dir="DoodlePixV4" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=8 --gradient_checkpointing --max_train_steps=15000 --learning_rate=1e-04 --max_grad_norm=1 --conditioning_dropout_prob=0.04 --mixed_precision=fp16 --enable_xformers_memory_efficient_attention --use_8bit_adam --seed=42 --random_flip --validation_epochs=2 --output_dir="DoodlePixV4_TXTGRAD" --cache_dir="cache" --val_images_dir="DoodlePixV4/val/" --validation_steps=2500 --checkpointing_steps=5000 --checkpoints_total_limit=3
 
 --DoodlePixV5
-accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="stable-diffusion-v1-5/stable-diffusion-v1-5" --train_data_dir="DoodlePixV5" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=8 --gradient_checkpointing --max_train_steps=25000 --learning_rate=8e-05 --max_grad_norm=1 --conditioning_dropout_prob=0.02 --mixed_precision=fp16 --enable_xformers_memory_efficient_attention --use_8bit_adam --seed=42 --random_flip --validation_epochs=2 --output_dir="models/DoodlePixV5" --cache_dir="cache" --val_images_dir="DoodlePixV4/val/" --validation_steps=2500 --checkpointing_steps=5000 --checkpoints_total_limit=3 --text_encoder_lr=1e-5 --lambda_reg=0.001
+accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="stable-diffusion-v1-5/stable-diffusion-v1-5" --pretrained_txtEncoder_path="models/txtEncoder/" --train_data_dir="DoodlePixV5_WIP" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=8 --gradient_checkpointing --max_train_steps=25000 --learning_rate=5e-05 --max_grad_norm=1 --conditioning_dropout_prob=0.02 --use_8bit_adam --enable_xformers_memory_efficient_attention --seed=42 --random_flip --validation_epochs=2 --output_dir="models/DoodlePixV5_WIP_FP16" --cache_dir="cache" --val_images_dir="DoodlePixV5_WIP/val/" --validation_steps=1000 --checkpointing_steps=4000 --checkpoints_total_limit=3 --text_encoder_learning_rate=1e-04
 
+
+TXTEncoder_DoodlePixV2
+accelerate launch train_instruct_pix2pixTxtEncoder.py --pretrained_model_name_or_path="stable-diffusion-v1-5/stable-diffusion-v1-5" --train_data_dir="DoodlePixV5_WIP/" --max_train_steps=10000 --batch_size 4 --gradient_accumulation_steps 8
 
 LORA training
 

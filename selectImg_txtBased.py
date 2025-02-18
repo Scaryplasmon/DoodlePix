@@ -30,7 +30,7 @@ def copy_matching_images(input_folder, target_folder):
 
 if __name__ == "__main__":
     # Replace these paths with your actual folder paths
-    input_folder = "DoodlePixV4/DoodlePixV5/A_flat/newBis"  # folder containing .txt files
-    target_folder = "DoodlePixV4/DoodlePixV5/A_flat/txt"  # folder containing images
+    input_folder = "DoodlePixV4/DoodlePixV5/A_flat/_bis/bb/"  # folder containing .txt files
+    target_folder = "DoodlePixV4/DoodlePixV5/A_flat/edges_A_flat/"  # folder containing images
     
     copy_matching_images(input_folder, target_folder)

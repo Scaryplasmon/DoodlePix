@@ -51,7 +51,7 @@ if __name__ == "__main__":
     parser.add_argument('--txt_source_folder', '-t', type=str, required=True,
                       help='Folder containing the source txt files')
     """
-        python selectTxt_imgBased.py -i "DoodlePixV4/DoodlePixV5/A_flat/newBis" -t "DoodlePixV4/DoodlePixV5/A_flat"
+        python selectTxt_imgBased.py -i "DoodlePixV4/DoodlePixV5/edited_image/Doodles/" -t "DoodlePixV4/DoodlePixV5/edited_image/fidelity/"
     """
     args = parser.parse_args()
     copy_matching_txt_files(args.input_folder, args.txt_source_folder)

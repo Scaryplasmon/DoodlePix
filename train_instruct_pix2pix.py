@@ -116,7 +116,7 @@ def log_validation(
                     except Exception as e:
                         logger.error(f"Failed to save original image {base_name}: {e}")
                         continue
-                    
+                    generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
                     # Generate edited images
                     edited_images = []
                     for idx in range(args.num_validation_images):
@@ -180,6 +180,13 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script for InstructPix2Pix.")
     parser.add_argument(
         "--pretrained_model_name_or_path",
+        type=str,
+        default=None,
+        required=True,
+        help="Path to pretrained model or model identifier from huggingface.co/models.",
+    )
+    parser.add_argument(
+        "--pretrained_txtEncoder_path",
         type=str,
         default=None,
         required=True,
@@ -589,19 +596,19 @@ def main():
         args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
     )
     
-    # Load the teacher text encoder (frozen copy of original)
-    teacher_text_encoder = CLIPTextModel.from_pretrained(
-        args.pretrained_model_name_or_path,
-        subfolder="text_encoder",
-        revision=args.revision,
-        variant=args.variant,
-    )
-    teacher_text_encoder.requires_grad_(False)  # Ensure it's frozen
-    teacher_text_encoder.eval()
+    # # Load the teacher text encoder (frozen copy of original)
+    # teacher_text_encoder = CLIPTextModel.from_pretrained(
+    #     args.pretrained_model_name_or_path,
+    #     subfolder="text_encoder",
+    #     revision=args.revision,
+    #     variant=args.variant,
+    # )
+    # teacher_text_encoder.requires_grad_(False)  # Ensure it's frozen
+    # teacher_text_encoder.eval()
 
     # Regular text encoder (trainable)
     text_encoder = CLIPTextModel.from_pretrained(
-        args.pretrained_model_name_or_path,
+        args.pretrained_txtEncoder_path,
         subfolder="text_encoder",
         revision=args.revision,
         variant=args.variant,
@@ -638,7 +645,8 @@ def main():
 
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
-    text_encoder.requires_grad_(False)
+    #we train the txtEncoder separately in FP32 using train_instruct_pix2pixTxtEncoder.py
+    # text_encoder.requires_grad_(True)
 
     # Create EMA for the unet.
     if args.use_ema:
@@ -1069,9 +1077,9 @@ def main():
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
 
                 # Add teacher distillation loss if available
-                teacher_loss = None
-                if teacher_loss is not None:
-                    loss = loss + teacher_loss
+                # teacher_loss = None
+                # if teacher_loss is not None:
+                #     loss = loss + teacher_loss
 
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
@@ -1142,9 +1150,7 @@ def main():
                             vae=unwrap_model(vae),
                             revision=args.revision,
                             variant=args.variant,
-                            torch_dtype=weight_dtype,
-                            teacher_text_encoder=teacher_text_encoder,
-                            teacher_loss_weight=args.text_encoder_teacher_loss_weight,
+                            torch_dtype=weight_dtype
                         )
                         accelerator.step = global_step  # Add this line before calling log_validation
 
@@ -1185,9 +1191,7 @@ def main():
                     vae=unwrap_model(vae),
                     revision=args.revision,
                     variant=args.variant,
-                    torch_dtype=weight_dtype,
-                    teacher_text_encoder=teacher_text_encoder,
-                    teacher_loss_weight=args.text_encoder_teacher_loss_weight,
+                    torch_dtype=weight_dtype
                 )
 
                 log_validation(
