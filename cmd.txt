@@ -27,7 +27,7 @@ accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretraine
 
 
 TXTEncoder_DoodlePixV2
-accelerate launch train_instruct_pix2pixTxtEncoder.py --pretrained_model_name_or_path="stable-diffusion-v1-5/stable-diffusion-v1-5" --train_data_dir="DoodlePixV5_WIP/" --max_train_steps=10000 --batch_size 4 --gradient_accumulation_steps 8
+accelerate launch train_instruct_pix2pixTxtEncoder.py --pretrained_model_name_or_path="stable-diffusion-v1-5/stable-diffusion-v1-5" --train_data_dir="DoodlePixV5_WIP/" --max_train_steps=10000 --batch_size 8 --gradient_accumulation_steps 8
 
 LORA training
 

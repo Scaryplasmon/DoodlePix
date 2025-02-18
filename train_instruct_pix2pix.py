@@ -609,7 +609,6 @@ def main():
     # Regular text encoder (trainable)
     text_encoder = CLIPTextModel.from_pretrained(
         args.pretrained_txtEncoder_path,
-        subfolder="text_encoder",
         revision=args.revision,
         variant=args.variant,
     )
@@ -1110,10 +1109,10 @@ def main():
                         logger.info(f"Saved state to {save_path}")
 
                         # Save the trained text encoder separately
-                        if accelerator.is_main_process:
-                            unwrapped_text_encoder = accelerator.unwrap_model(text_encoder)
-                            unwrapped_text_encoder.save_pretrained(os.path.join(save_path, "text_encoder"))
-                            logger.info(f"Saved text encoder to {save_path}/text_encoder")
+                        # if accelerator.is_main_process:
+                        #     unwrapped_text_encoder = accelerator.unwrap_model(text_encoder)
+                        #     unwrapped_text_encoder.save_pretrained(os.path.join(save_path, "text_encoder"))
+                        #     logger.info(f"Saved text encoder to {save_path}/text_encoder")
 
                         # Optionally clean up old checkpoints
                         if args.checkpoints_total_limit is not None:

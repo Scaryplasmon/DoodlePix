@@ -330,7 +330,7 @@ def main():
     parser.add_argument("--max_train_steps", type=int, default=10000)
     parser.add_argument("--lambda_bg", type=float, default=0.5,
                         help="Weight for background color loss")
-    parser.add_argument("--output_dir", type=str, default="TXTEncoder_DoodlePixV2/")
+    parser.add_argument("--output_dir", type=str, default="models/txtEncoder/")
     parser.add_argument("--sample_prompt_file", type=str, default="DoodlePixV5_WIP/edit_prompt/3D_00002_bis.txt")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8,
                         help="Number of gradient accumulation steps")
@@ -485,7 +485,8 @@ def main():
     if accelerator.is_main_process:
         unwrapped_model = accelerator.unwrap_model(model)
         os.makedirs(args.output_dir, exist_ok=True)
-        torch.save(unwrapped_model.state_dict(), os.path.join(args.output_dir, "pytorch_model.bin"))
+        # Save only the underlying text_encoder in HF format
+        unwrapped_model.text_encoder.save_pretrained(args.output_dir)
         tokenizer.save_pretrained(args.output_dir)
         logger.info(f"Model saved to {args.output_dir}")
 
