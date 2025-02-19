@@ -644,8 +644,9 @@ def main():
 
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
-    #we train the txtEncoder separately in FP32 using train_instruct_pix2pixTxtEncoder.py
-    # text_encoder.requires_grad_(True)
+    # Freeze text encoder since we're using the pre-trained FP32 version
+    text_encoder.requires_grad_(False)
+    text_encoder.eval()  # Set to eval mode
 
     # Create EMA for the unet.
     if args.use_ema:
@@ -718,10 +719,10 @@ def main():
             args.learning_rate * args.gradient_accumulation_steps * args.train_batch_size * accelerator.num_processes
         )
 
+    # Only optimize UNet parameters
     # Modify the optimizer setup to include text encoder with its own learning rate:
     params_to_optimize = [
-        {"params": unet.parameters(), "lr": args.learning_rate},
-        {"params": text_encoder.parameters(), "lr": args.text_encoder_learning_rate},
+        {"params": unet.parameters(), "lr": args.learning_rate}
     ]
 
     if args.use_8bit_adam:
@@ -938,7 +939,7 @@ def main():
         weight_dtype = torch.bfloat16
 
     # Move text_encode and vae to gpu and cast to weight_dtype
-    text_encoder.to(accelerator.device, dtype=weight_dtype)
+    text_encoder.to(accelerator.device, dtype=torch.float32)
     vae.to(accelerator.device, dtype=weight_dtype)
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
@@ -1003,7 +1004,7 @@ def main():
 
     for epoch in range(first_epoch, args.num_train_epochs):
         unet.train()
-        text_encoder.train()  # Ensure text encoder is in training mode
+        # text_encoder.train()  # Ensure text encoder is in training mode
         train_loss = 0.0
         for step, batch in enumerate(train_dataloader):
             # Skip steps until we reach the resumed step
@@ -1084,12 +1085,14 @@ def main():
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
                 train_loss += avg_loss.item() / args.gradient_accumulation_steps
 
-                # Backpropagate
-                accelerator.backward(loss, clip_grad_norm=args.max_grad_norm)  # Built-in gradient clipping
+                # Backpropagation
+                accelerator.backward(loss)
+                
                 if accelerator.sync_gradients:
+                    accelerator.clip_grad_norm_(unet.parameters(), args.max_grad_norm)
                     optimizer.step()
-                    lr_scheduler.step()
                     optimizer.zero_grad()
+                    lr_scheduler.step()
 
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:

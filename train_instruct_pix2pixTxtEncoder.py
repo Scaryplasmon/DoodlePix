@@ -90,13 +90,54 @@ def extract_background_color(image, border_width=10):
     avg = [sum([p[i] for p in border_pixels]) / len(border_pixels) for i in range(3)]
     return torch.tensor(avg, dtype=torch.float32) / 255.0
 
+def descriptive_to_rgb(description):
+    """Convert descriptive color string (e.g., 'dark vibrant red') to an RGB tensor.
+    
+    Uses a simple heuristic based on a base-color lookup and adjective adjustments.
+    """
+    # Base color mapping: approximate RGB values.
+    base_colors = {
+        "red": (255, 0, 0),
+        "orange": (255, 165, 0),
+        "yellow": (255, 255, 0),
+        "green": (0, 128, 0),
+        "cyan": (0, 255, 255),
+        "blue": (0, 0, 255),
+        "purple": (128, 0, 128),
+        "pink": (255, 192, 203),
+        "grey": (128, 128, 128)
+    }
+    words = description.split()
+    # Assume base color is the last token
+    base = words[-1].lower()
+    rgb = base_colors.get(base, (128, 128, 128))
+    r, g, b = rgb
+    adjectives = set(word.lower() for word in words[:-1])
+    # Adjust values based on simple adjective heuristics.
+    if "dark" in adjectives:
+        r, g, b = int(r * 0.5), int(g * 0.5), int(b * 0.5)
+    elif "light" in adjectives:
+        r = int((r + 255) / 2)
+        g = int((g + 255) / 2)
+        b = int((b + 255) / 2)
+    elif "pastel" in adjectives:
+        r = int((r + 0.75 * 255) / 2)
+        g = int((g + 0.75 * 255) / 2)
+        b = int((b + 0.75 * 255) / 2)
+    elif "vibrant" in adjectives:
+        r = min(255, int(r * 1.1))
+        g = min(255, int(g * 1.1))
+        b = min(255, int(b * 1.1))
+    return torch.tensor([r, g, b], dtype=torch.float32)
+
 def parse_prompt(prompt):
     """
     Parse the prompt into its components.
       - Fidelity: e.g. "f8" -> 8.0
       - Shading: from bracketed expression, e.g. "[3D]" -> "3d"
       - Tags: from <tags: ...> (list of strings)
-      - Hex codes: all occurrences of hex color codes
+      - Palette descriptors: comma-separated descriptions (e.g., "dark vibrant red, light pastel green")
+      - Background color: if any descriptor contains "background", separate it.
     """
     fidelity_match = re.search(r'^\s*f(\d+)', prompt, re.IGNORECASE)
     fidelity = float(fidelity_match.group(1)) if fidelity_match else 0.0
@@ -109,18 +150,33 @@ def parse_prompt(prompt):
     tags_match = re.search(r'<tags:\s*([^>]+)>', prompt, re.IGNORECASE)
     tags = [tag.strip() for tag in tags_match.group(1).split(",")] if tags_match else []
 
-    hex_codes = re.findall(r'#[0-9A-Fa-f]{6}', prompt)
+    # Extract palette descriptors: the text after the <tags: ...> section
+    palette_part = ""
+    if tags_match:
+        palette_part = prompt.split(tags_match.group(0))[-1]
+    # Split palette part on commas and remove empty entries
+    palette_items = [item.strip() for item in palette_part.split(",") if item.strip()]
 
-    return fidelity, shading, tags, hex_codes
+    background_color = None
+    refined_palette = []
+    for item in palette_items:
+        if "background" in item.lower():
+            # Remove the term "background" from the item.
+            background_color = item.replace("background", "").strip()
+        else:
+            refined_palette.append(item)
 
-def process_palette(hex_codes, max_palette_length):
+    return fidelity, shading, tags, refined_palette, background_color
+
+def process_palette(palette_descriptions, max_palette_length):
     """
-    Convert a list of hex codes (of variable length) into a tensor of shape (max_palette_length, 3)
+    Convert a list of descriptive palette strings into a tensor of shape (max_palette_length, 3)
     and a boolean mask indicating valid positions.
-    If fewer than max_palette_length codes are present, pad with zeros.
-    If more, truncate to max_palette_length.
+    
+    If fewer than max_palette_length descriptors are present, the palette is padded with zeros;
+    if more, it is truncated.
     """
-    colors = [hex_to_rgb(code) for code in hex_codes]
+    colors = [descriptive_to_rgb(desc) for desc in palette_descriptions]
     num = len(colors)
     if num < max_palette_length:
         for _ in range(max_palette_length - num):
@@ -161,8 +217,8 @@ class TextMultiTaskDataset(Dataset):
         # Resize the edited image to the expected resolution
         edited_image = edited_image.resize((self.resolution, self.resolution))
 
-        fidelity, shading, tags, hex_codes = parse_prompt(prompt)
-        target_palette, palette_mask = process_palette(hex_codes, self.max_palette_length)
+        fidelity, shading, tags, palette_descriptions, background_color = parse_prompt(prompt)
+        target_palette, palette_mask = process_palette(palette_descriptions, self.max_palette_length)
         # Extract background color from the edited image
         target_bg = extract_background_color(edited_image)
 
@@ -326,11 +382,11 @@ def main():
     parser.add_argument("--max_palette_length", type=int, default=6,
                         help="Maximum number of hex colors (palette length)")
     parser.add_argument("--batch_size", type=int, default=1)
-    parser.add_argument("--learning_rate", type=float, default=5e-5)
+    parser.add_argument("--learning_rate", type=float, default=1e-4)
     parser.add_argument("--max_train_steps", type=int, default=10000)
     parser.add_argument("--lambda_bg", type=float, default=0.5,
                         help="Weight for background color loss")
-    parser.add_argument("--output_dir", type=str, default="models/txtEncoder/")
+    parser.add_argument("--output_dir", type=str, default="models/txtEncoder2/")
     parser.add_argument("--sample_prompt_file", type=str, default="DoodlePixV5_WIP/edit_prompt/3D_00002_bis.txt")
     parser.add_argument("--gradient_accumulation_steps", type=int, default=8,
                         help="Number of gradient accumulation steps")
