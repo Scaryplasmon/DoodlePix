@@ -187,3 +187,4 @@ cython_debug/
 /validation_results
 README_sdxl.md
 READMEdiffusers.md
+/TXTEncoder_DoodlePixV2
