@@ -41,6 +41,7 @@ from datasets import Dataset, Image
 from PIL import Image as PILImage
 from peft import PeftModel
 import glob
+from fidelity_mlp import FidelityMLP
 
 if is_wandb_available():
     import wandb
@@ -499,6 +500,12 @@ def parse_args():
         default=0.1,
         help="Weight for teacher distillation loss"
     )
+    parser.add_argument(
+        "--fidelity_mlp_learning_rate",
+        type=float,
+        default=1e-4,  # Slightly lower than main learning rate
+        help="Learning rate for the fidelity MLP",
+    )
 
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
@@ -719,11 +726,12 @@ def main():
             args.learning_rate * args.gradient_accumulation_steps * args.train_batch_size * accelerator.num_processes
         )
 
-    # Only optimize UNet parameters
-    # Modify the optimizer setup to include text encoder with its own learning rate:
-    params_to_optimize = [
-        {"params": unet.parameters(), "lr": args.learning_rate}
-    ]
+    # Initialize FidelityMLP
+    hidden_size = text_encoder.config.hidden_size
+    fidelity_mlp = FidelityMLP(hidden_size)
+    fidelity_mlp.to(accelerator.device)
+
+    # Modify optimizer setup to include fidelity_mlp parameters
 
     if args.use_8bit_adam:
         try:
@@ -733,6 +741,12 @@ def main():
         optimizer_cls = bnb.optim.AdamW8bit
     else:
         optimizer_cls = torch.optim.AdamW
+
+    # Include fidelity_mlp in parameters to optimize
+    params_to_optimize = [
+        {"params": unet.parameters(), "lr": args.learning_rate},
+        {"params": fidelity_mlp.parameters(), "lr": args.fidelity_mlp_learning_rate if args.fidelity_mlp_learning_rate else args.learning_rate}
+    ]
 
     optimizer = optimizer_cls(
         params_to_optimize,
@@ -923,8 +937,8 @@ def main():
     )
 
     # Prepare everything with our `accelerator`.
-    unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-        unet, optimizer, train_dataloader, lr_scheduler
+    unet, optimizer, train_dataloader, lr_scheduler, fidelity_mlp = accelerator.prepare(
+        unet, optimizer, train_dataloader, lr_scheduler, fidelity_mlp
     )
 
     if args.use_ema:
@@ -1228,7 +1242,12 @@ def main():
             revision=args.revision,
             variant=args.variant,
         )
+        pipeline.fidelity_mlp = unwrap_model(fidelity_mlp)
         pipeline.save_pretrained(args.output_dir)
+
+        # Save fidelity_mlp separately
+        torch.save(unwrap_model(fidelity_mlp).state_dict(), 
+                  os.path.join(args.output_dir, "fidelity_mlp.pt"))
 
         if args.push_to_hub:
             upload_folder(

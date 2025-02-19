@@ -15,18 +15,12 @@ def replace_in_files(folder_path):
                 print(f"Original content: {content.strip()}")
                 
                 # Replace the text and track changes
-                if '<tags:' in content:
-                    modified_content = content.replace('<tags:', '[normal], <tags:')
-                    print("Added [normal] tag")
+                if ', <tags:' in content:
+                    modified_content = content.replace(', <tags:', ',')
+                    print("Removed , <tags:")
                 else:
                     modified_content = content
-                    print("No <tags: found to add [normal] tag")
-                    
-                if 'background,' in modified_content:
-                    modified_content = modified_content.replace('background,', 'background.')
-                    print("Replaced background comma with period")
-                else:
-                    print("No background comma found to replace")
+                    print("No , <tags: found to remove")
 
                 if modified_content != content:
                     # Write back to the file only if changes were made
@@ -40,7 +34,7 @@ def replace_in_files(folder_path):
                 print(f"Error processing {filename}: {e}")
 
 # Use the script
-folder_path = "DoodlePixV4/DoodlePixV5/edited_image/edit_prompt/"  # Replace with your folder path
+folder_path = "DoodlePixV5_WIP/edit_prompt/"  # Replace with your folder path
 # s = ["fantasy", "whimsical", "steampunk", "sci-fi"]
 replace_in_files(folder_path)
 
