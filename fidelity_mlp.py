@@ -1,10 +1,11 @@
-# fidelity_mlp.py
 import torch
 import torch.nn as nn
+import os
 
 class FidelityMLP(nn.Module):
     def __init__(self, hidden_size):
         super().__init__()
+        self.hidden_size = hidden_size  # Save for loading
         self.net = nn.Sequential(
             nn.Linear(1, hidden_size // 2),
             nn.ReLU(),
@@ -14,6 +15,37 @@ class FidelityMLP(nn.Module):
     
     def forward(self, x):
         return self.net(x)
+    
+    def save_pretrained(self, save_directory):
+        """Save the model to a directory"""
+        os.makedirs(save_directory, exist_ok=True)
+        
+        # Save the model config
+        config = {
+            "hidden_size": self.hidden_size
+        }
+        config_file = os.path.join(save_directory, "config.json")
+        torch.save(config, config_file)
+        
+        # Save the model weights
+        model_file = os.path.join(save_directory, "pytorch_model.bin")
+        torch.save(self.state_dict(), model_file)
+    
+    @classmethod
+    def from_pretrained(cls, pretrained_model_path):
+        """Load the model from a directory"""
+        config_file = os.path.join(pretrained_model_path, "config.json")
+        model_file = os.path.join(pretrained_model_path, "pytorch_model.bin")
+        
+        # Load config
+        config = torch.load(config_file)
+        
+        # Create model instance
+        model = cls(hidden_size=config["hidden_size"])
+        
+        # Load weights
+        model.load_state_dict(torch.load(model_file))
+        return model
 
 
 """

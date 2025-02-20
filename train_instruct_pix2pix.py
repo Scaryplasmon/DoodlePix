@@ -73,8 +73,9 @@ def log_validation(
         os.makedirs(step_dir, exist_ok=True)
         
         pipeline = pipeline.to(accelerator.device)
+        
+        
         pipeline.set_progress_bar_config(disable=True)
-
         # Get all validation images and their corresponding prompts
         val_images_dir = args.val_images_dir  # New argument needed
         try:
@@ -190,7 +191,7 @@ def parse_args():
         "--pretrained_txtEncoder_path",
         type=str,
         default=None,
-        required=True,
+        required=False,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
     )
     parser.add_argument(
@@ -615,7 +616,8 @@ def main():
 
     # Regular text encoder (trainable)
     text_encoder = CLIPTextModel.from_pretrained(
-        args.pretrained_txtEncoder_path,
+        args.pretrained_model_name_or_path,
+        subfolder="text_encoder",
         revision=args.revision,
         variant=args.variant,
     )
@@ -686,7 +688,12 @@ def main():
                     ema_unet.save_pretrained(os.path.join(output_dir, "unet_ema"))
 
                 for i, model in enumerate(models):
-                    model.save_pretrained(os.path.join(output_dir, "unet"))
+                    if isinstance(model, FidelityMLP):
+                        # Save FidelityMLP
+                        model.save_pretrained(os.path.join(output_dir, "fidelity_mlp"))
+                    else:
+                        # Original save logic for other models
+                        model.save_pretrained(os.path.join(output_dir, "unet"))
 
                     # make sure to pop weight so that corresponding model is not saved again
                     if weights:
@@ -1237,17 +1244,18 @@ def main():
         # Save the pipeline
         pipeline = StableDiffusionInstructPix2PixPipeline.from_pretrained(
             args.pretrained_model_name_or_path,
-            unet=unet,
+            unet=accelerator.unwrap_model(unet),
             text_encoder=text_encoder,
             revision=args.revision,
             variant=args.variant,
         )
         pipeline.fidelity_mlp = unwrap_model(fidelity_mlp)
         pipeline.save_pretrained(args.output_dir)
-
-        # Save fidelity_mlp separately
-        torch.save(unwrap_model(fidelity_mlp).state_dict(), 
-                  os.path.join(args.output_dir, "fidelity_mlp.pt"))
+        
+        # Save FidelityMLP separately
+        accelerator.unwrap_model(fidelity_mlp).save_pretrained(
+            os.path.join(args.output_dir, "fidelity_mlp")
+        )
 
         if args.push_to_hub:
             upload_folder(

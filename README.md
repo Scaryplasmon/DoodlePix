@@ -6,6 +6,24 @@ in this case the input image is a doodle and the text prompt has this shape exam
 
 f=5, [flat], <tags: gold, shield, diamond, currency, emblem>,   #f9c473, #cb6240, #fdfcf8, #ffffff background.
 
+
+Training results:
+- FidelityMLP still to be implemented in the actual pipeline (was giving issues like size 78 exceeds token limits of ClipTextEncoder which is 77)
+- Training with txtEncoder requiring grad kept giving errors so we split the training into two parts:
+    - PreTrained txtEncoder in FP32 then load it into unet FP16 training.
+- Tried training in BF16 but noticed quite some worsening in the results
+
+Feels data needs more fidelity variation. (seemed like the image guidance was sort of working ranging from 0.5 to 5.0)- maybe FidelityMLP is not needed?
+
+training seems to give good results in alrady 2k steps, but its a fluke, add real VALIDATION drawings, not just canny images.
+
+learning rate should be 5e-5 dont change it.
+
+DELETE SHITTY IMAGES, or too repetive ones.
+Check "image_XXXXX, there´s a lot of repetitive ones that could be deleted or at least prompts should be matching.
+
+
+
 TODOs
 
 _bis for Hue and Contrast and Vibrant changes
