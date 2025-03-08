@@ -5,26 +5,68 @@ This repo is a custom implementation of the InstructPix2Pix model, a text-to-ima
 in this case the input image is a doodle and the text prompt has this shape example:
 
 
-<img src="assets/axe.png" alt="Image" width="150" height="150">
-<img src="assets/AxeNormal.gif" alt="GIF 1" width="150" height="150">
-<img src="assets/Axe3D.gif" alt="3D" width="150" height="150">
-<img src="assets/AxeOutline.gif" alt="Outline" width="150" height="150">
-<img src="assets/AxeFlat.gif" alt="Flat" width="150" height="150">
+
 <table>
   <tr>
-    <td><img src="assets/axe.png" alt="Image" width="150" height="150"></td>
-    <td><img src="assets/AxeNormal.gif" alt="Normal" width="150" height="150"></td>
-    <td><img src="assets/Axe3D.gif" alt="3D" width="150" height="150"></td>
-    <td><img src="assets/AxeOutline.gif" alt="Outline" width="150" height="150"></td>
-    <td><img src="assets/AxeFlat.gif" alt="Flat" width="150" height="150"></td>
+    <td style="text-align: center;">
+      <strong>Image</strong><br>
+      <img src="assets/axe.png" alt="Image" width="150" height="150">
+    </td>
+    <td style="text-align: center;">
+      <strong>Normal</strong><br>
+      <img src="assets/AxeNormal.gif" alt="Normal" width="150" height="150">
+    </td>
+    <td style="text-align: center;">
+      <strong>3D</strong><br>
+      <img src="assets/Axe3D.gif" alt="3D" width="150" height="150">
+    </td>
+    <td style="text-align: center;">
+      <strong>Outline</strong><br>
+      <img src="assets/AxeOutline.gif" alt="Outline" width="150" height="150">
+    </td>
+    <td style="text-align: center;">
+      <strong>Flat</strong><br>
+      <img src="assets/AxeFlat.gif" alt="Flat" width="150" height="150">
+    </td>
   </tr>
   <tr>
-    <td><img src="image.png" alt="Image" width="150" height="150"></td>
-    <td><img src="video5.gif" alt="GIF 5" width="150" height="150"></td>
-    <td><img src="video6.gif" alt="GIF 6" width="150" height="150"></td>
-    <td><img src="video7.gif" alt="GIF 7" width="150" height="150"></td>
+    <td style="text-align: center;">
+      <strong>Image</strong><br>
+      <img src="assets/potion.png" alt="Image" width="150" height="150">
+    </td>
+    <td style="text-align: center;">
+      <strong>Normal</strong><br>
+      <img src="assets/PotionNormal.gif" alt="Normal" width="150" height="150">
+    </td>
+    <td style="text-align: center;">
+      <strong>3D</strong><br>
+      <img src="assets/Potion3D.gif" alt="3D" width="150" height="150">
+    </td>
+    <td style="text-align: center;">
+      <strong>Outline</strong><br>
+      <img src="assets/PotionOutline.gif" alt="Outline" width="150" height="150">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align: center;">
+      <strong>Image</strong><br>
+      <img src="assets/torch.png" alt="Image" width="150" height="150">
+    </td>
+    <td style="text-align: center;">
+      <strong>Normal</strong><br>
+      <img src="assets/TorchNormal.gif" alt="Normal" width="150" height="150">
+    </td>
+    <td style="text-align: center;">
+      <strong>3D</strong><br>
+      <img src="assets/Torch3D.gif" alt="3D" width="150" height="150">
+    </td>
+    <td style="text-align: center;">
+      <strong>Outline</strong><br>
+      <img src="assets/TorchOutline.gif" alt="Outline" width="150" height="150">
+    </td>
   </tr>
 </table>
+
 
 
 ALMMOST THERE WITH THE DATA
