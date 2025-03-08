@@ -10,59 +10,59 @@ in this case the input image is a doodle and the text prompt has this shape exam
   <tr>
     <td style="text-align: center;">
       <strong>Image</strong><br>
-      <img src="assets/axe.png" alt="Image" width="150" height="150">
+      <img src="assets/axe.png" alt="Image" width="124" height="124">
     </td>
     <td style="text-align: center;">
       <strong>Normal</strong><br>
-      <img src="assets/AxeNormal.gif" alt="Normal" width="150" height="150">
+      <img src="assets/AxeNormal.gif" alt="Normal" width="124" height="124">
     </td>
     <td style="text-align: center;">
       <strong>3D</strong><br>
-      <img src="assets/Axe3D.gif" alt="3D" width="150" height="150">
+      <img src="assets/Axe3D.gif" alt="3D" width="124" height="124">
     </td>
     <td style="text-align: center;">
       <strong>Outline</strong><br>
-      <img src="assets/AxeOutline.gif" alt="Outline" width="150" height="150">
+      <img src="assets/AxeOutline.gif" alt="Outline" width="124" height="124">
     </td>
     <td style="text-align: center;">
       <strong>Flat</strong><br>
-      <img src="assets/AxeFlat.gif" alt="Flat" width="150" height="150">
+      <img src="assets/AxeFlat.gif" alt="Flat" width="124" height="124">
     </td>
   </tr>
   <tr>
     <td style="text-align: center;">
       <strong>Image</strong><br>
-      <img src="assets/potion.png" alt="Image" width="150" height="150">
+      <img src="assets/potion.png" alt="Image" width="124" height="124">
     </td>
     <td style="text-align: center;">
       <strong>Normal</strong><br>
-      <img src="assets/PotionNormal.gif" alt="Normal" width="150" height="150">
+      <img src="assets/PotionNormal.gif" alt="Normal" width="124" height="124">
     </td>
     <td style="text-align: center;">
       <strong>3D</strong><br>
-      <img src="assets/Potion3D.gif" alt="3D" width="150" height="150">
+      <img src="assets/Potion3D.gif" alt="3D" width="124" height="124">
     </td>
     <td style="text-align: center;">
       <strong>Outline</strong><br>
-      <img src="assets/PotionOutline.gif" alt="Outline" width="150" height="150">
+      <img src="assets/PotionOutline.gif" alt="Outline" width="124" height="124">
     </td>
   </tr>
   <tr>
     <td style="text-align: center;">
       <strong>Image</strong><br>
-      <img src="assets/torch.png" alt="Image" width="150" height="150">
+      <img src="assets/torch.png" alt="Image" width="124" height="124">
     </td>
     <td style="text-align: center;">
       <strong>Normal</strong><br>
-      <img src="assets/TorchNormal.gif" alt="Normal" width="150" height="150">
+      <img src="assets/TorchNormal.gif" alt="Normal" width="124" height="124">
     </td>
     <td style="text-align: center;">
       <strong>3D</strong><br>
-      <img src="assets/Torch3D.gif" alt="3D" width="150" height="150">
+      <img src="assets/Torch3D.gif" alt="3D" width="124" height="124">
     </td>
     <td style="text-align: center;">
       <strong>Outline</strong><br>
-      <img src="assets/TorchOutline.gif" alt="Outline" width="150" height="150">
+      <img src="assets/TorchOutline.gif" alt="Outline" width="124" height="124">
     </td>
   </tr>
 </table>
