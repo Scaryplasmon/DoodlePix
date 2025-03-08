@@ -13,13 +13,14 @@
 # limitations under the License.
 
 import inspect
-from typing import Any, Callable, Dict, List, Optional, Union, Tuple
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import numpy as np
 import PIL.Image
 import torch
 import torch.nn.functional as F
 from transformers import CLIPImageProcessor, CLIPTextModel, CLIPTokenizer, CLIPVisionModelWithProjection
+import os
 
 from ...callbacks import MultiPipelineCallbacks, PipelineCallback
 from ...image_processor import PipelineImageInput, VaeImageProcessor
@@ -139,6 +140,7 @@ class StableDiffusionInstructPix2PixPipeline(
         requires_safety_checker: bool = False,
         teacher_text_encoder: Optional[CLIPTextModel] = None,
         teacher_loss_weight: float = 0.1,
+        fidelity_mlp = None,
     ):
         super().__init__()
 
@@ -170,12 +172,12 @@ class StableDiffusionInstructPix2PixPipeline(
         )
         self.teacher_text_encoder = teacher_text_encoder
         self.teacher_loss_weight = teacher_loss_weight
+        self.fidelity_mlp = fidelity_mlp
         if self.teacher_text_encoder is not None:
             self.teacher_text_encoder.eval()
         self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1) if getattr(self, "vae", None) else 8
         self.image_processor = VaeImageProcessor(vae_scale_factor=self.vae_scale_factor)
         self.register_to_config(requires_safety_checker=requires_safety_checker)
-        self.fidelity_mlp = None
 
     @torch.no_grad()
     def __call__(
@@ -534,34 +536,13 @@ class StableDiffusionInstructPix2PixPipeline(
                 weighting. If not provided, negative_prompt_embeds will be generated from `negative_prompt` input
                 argument.
         """
-        # Extract fidelity value from prompt
-        import re
-        fidelity_val = 0.5  # default fidelity
-        if isinstance(prompt, str):
-            match = re.search(r"f(\d+)", prompt)
-            if match:
-                f_int = int(match.group(1))
-                f_int = max(1, min(f_int, 9))
-                fidelity_val = 0.1 + (f_int - 1) * (0.8 / 8)
-                # Remove the fidelity token from prompt
-                prompt = re.sub(r"f\d+\s*", "", prompt).strip()
-        elif isinstance(prompt, list):
-            f_vals = []
-            cleaned_prompts = []
-            for p in prompt:
-                match = re.search(r"f(\d+)", p)
-                if match:
-                    f_int = int(match.group(1))
-                    f_int = max(1, min(f_int, 9))
-                    f_vals.append(0.1 + (f_int - 1) * (0.8 / 8))
-                    # Remove the fidelity token from prompt
-                    cleaned_prompt = re.sub(r"f\d+\s*", "", p).strip()
-                    cleaned_prompts.append(cleaned_prompt)
-            if f_vals:
-                fidelity_val = sum(f_vals) / len(f_vals)
-                prompt = cleaned_prompts
+        if prompt is not None and isinstance(prompt, str):
+            batch_size = 1
+        elif prompt is not None and isinstance(prompt, list):
+            batch_size = len(prompt)
+        else:
+            batch_size = prompt_embeds.shape[0]
 
-        # Get text embeddings
         if prompt_embeds is None:
             # textual inversion: process multi-vector tokens if necessary
             if isinstance(self, TextualInversionLoaderMixin):
@@ -596,23 +577,61 @@ class StableDiffusionInstructPix2PixPipeline(
             prompt_embeds = self.text_encoder(text_input_ids.to(device), attention_mask=attention_mask)
             prompt_embeds = prompt_embeds[0]
 
-        
-        # Add fidelity embedding if fidelity_mlp is available
-        if self.fidelity_mlp is not None:
-            batch_size = prompt_embeds.shape[0]
-            fidelity_tensor = torch.full((batch_size, 1), fidelity_val, 
-                                      device=device, dtype=prompt_embeds.dtype)
-            fidelity_embedding = self.fidelity_mlp(fidelity_tensor)
-            fidelity_embedding = fidelity_embedding.unsqueeze(1)
-            prompt_embeds = torch.cat([fidelity_embedding, prompt_embeds], dim=1)
-        else:
-            prompt_embeds = prompt_embeds.to(dtype=self.text_encoder.dtype, device=device)
-            bs_embed, seq_len, _ = prompt_embeds.shape
-            # duplicate text embeddings for each generation per prompt
-            prompt_embeds = prompt_embeds.repeat(1, num_images_per_prompt, 1)
-            prompt_embeds = prompt_embeds.view(bs_embed * num_images_per_prompt, seq_len, -1)
+        prompt_embeds = prompt_embeds.to(dtype=self.text_encoder.dtype, device=device)
 
-        # Handle classifier-free guidance
+        # Extract fidelity value from the prompt
+        fidelity_val = 0.5  # default fidelity
+        if self.fidelity_mlp is not None:
+            if prompt is not None:
+                if isinstance(prompt, str):
+                    import re
+                    # Extract fidelity value - look for patterns like "f5" or "f=5"
+                    match = re.search(r"f\s*=?\s*(\d+)|f(\d+)", prompt, re.IGNORECASE)
+                    if match:
+                        f_int = int(match.group(1) if match.group(1) else match.group(2))
+                        f_int = max(1, min(f_int, 9))
+                        # Map to normalized range [0.1, 0.9]
+                        fidelity_val = 0.1 + (f_int - 1) * (0.8 / 8)
+                elif isinstance(prompt, list):
+                    import re
+                    f_vals = []
+                    for p in prompt:
+                        match = re.search(r"f\s*=?\s*(\d+)|f(\d+)", p, re.IGNORECASE)
+                        if match:
+                            f_int = int(match.group(1) if match.group(1) else match.group(2))
+                            f_int = max(1, min(f_int, 9))
+                            f_vals.append(0.1 + (f_int - 1) * (0.8 / 8))
+                    if f_vals:
+                        fidelity_val = sum(f_vals) / len(f_vals)
+
+            # Create fidelity tensor
+            batch_size = prompt_embeds.shape[0]
+            fidelity_tensor = torch.full((batch_size, 1), fidelity_val, device=device, dtype=prompt_embeds.dtype)
+            
+            # Get fidelity embedding
+            fidelity_embedding = self.fidelity_mlp(fidelity_tensor)  # (batch, hidden_size)
+            
+            # FIXED: Instead of adding a new token, modify the first token embedding
+            # This keeps the sequence length the same (77 tokens)
+            prompt_embeds[:, 0] = prompt_embeds[:, 0] + 0.2 * fidelity_embedding
+
+        bs_embed, seq_len, _ = prompt_embeds.shape
+        # duplicate text embeddings for each generation per prompt
+        prompt_embeds = prompt_embeds.repeat(1, num_images_per_prompt, 1)
+        prompt_embeds = prompt_embeds.view(bs_embed * num_images_per_prompt, seq_len, -1)
+
+        teacher_loss = None
+        if return_teacher_loss and self.teacher_text_encoder is not None:
+            # Compute teacher embeddings using the frozen teacher text encoder
+            with torch.no_grad():
+                teacher_outputs = self.teacher_text_encoder(text_input_ids.to(device), attention_mask=attention_mask)
+                teacher_embeds = teacher_outputs[0]
+            teacher_embeds = teacher_embeds.to(dtype=self.text_encoder.dtype, device=device)
+            teacher_embeds = teacher_embeds.repeat(1, num_images_per_prompt, 1)
+            teacher_embeds = teacher_embeds.view(bs_embed * num_images_per_prompt, seq_len, -1)
+            # Compute an MSE loss between teacher and student text embeddings
+            teacher_loss = F.mse_loss(prompt_embeds, teacher_embeds) * self.teacher_loss_weight
+
         if do_classifier_free_guidance:
             # get unconditional embeddings for classifier free guidance
             if negative_prompt_embeds is None:
@@ -652,18 +671,26 @@ class StableDiffusionInstructPix2PixPipeline(
                     attention_mask=attention_mask,
                 )[0]
 
-                if self.fidelity_mlp is not None:
-                    negative_fidelity_embedding = torch.zeros_like(fidelity_embedding)
-                    negative_prompt_embeds = torch.cat([negative_fidelity_embedding, negative_prompt_embeds], dim=1)
-                else:
-                    negative_prompt_embeds = negative_prompt_embeds.to(dtype=self.text_encoder.dtype, device=device)
-                    bs_embed, seq_len, _ = negative_prompt_embeds.shape
-                    negative_prompt_embeds = negative_prompt_embeds.repeat(1, num_images_per_prompt, 1)
-                    negative_prompt_embeds = negative_prompt_embeds.view(batch_size * num_images_per_prompt, seq_len, -1)
-                    
-            # prompt_embeds = torch.cat([prompt_embeds, negative_prompt_embeds, negative_prompt_embeds])
-            prompt_embeds = torch.cat([negative_prompt_embeds, prompt_embeds])
+            negative_prompt_embeds = negative_prompt_embeds.to(dtype=self.text_encoder.dtype, device=device)
+            
+            # Apply the same fidelity modification to negative prompt embeddings
+            if self.fidelity_mlp is not None:
+                bs_neg = negative_prompt_embeds.shape[0]
+                fidelity_tensor = torch.full((bs_neg, 1), fidelity_val, device=device, dtype=negative_prompt_embeds.dtype)
+                fidelity_embedding = self.fidelity_mlp(fidelity_tensor)
+                
+                # FIXED: Modify the first token of negative embedding instead of concatenating
+                negative_prompt_embeds[:, 0] = negative_prompt_embeds[:, 0] + 0.2 * fidelity_embedding
+            
+            bs_embed, seq_len, _ = negative_prompt_embeds.shape
+            negative_prompt_embeds = negative_prompt_embeds.repeat(1, num_images_per_prompt, 1)
+            negative_prompt_embeds = negative_prompt_embeds.view(batch_size * num_images_per_prompt, seq_len, -1)
 
+            # For classifier free guidance, we need to do it for both positive and negative
+            prompt_embeds = torch.cat([prompt_embeds, negative_prompt_embeds, negative_prompt_embeds])
+
+        if return_teacher_loss:
+            return prompt_embeds, teacher_loss
         return prompt_embeds
 
     # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline.encode_image
@@ -942,3 +969,26 @@ class StableDiffusionInstructPix2PixPipeline(
     @property
     def do_classifier_free_guidance(self):
         return self.guidance_scale > 1.0 and self.image_guidance_scale >= 1.0
+
+    @classmethod
+    def from_pretrained_with_fidelity(cls, pretrained_model_path, fidelity_mlp_path=None, **kwargs):
+        """Load the pipeline with a fidelity MLP model."""
+        pipeline = cls.from_pretrained(pretrained_model_path, **kwargs)
+        
+        if fidelity_mlp_path is not None:
+            from fidelity_mlp import FidelityMLP
+            # Load the FidelityMLP
+            hidden_size = pipeline.text_encoder.config.hidden_size
+            if os.path.exists(fidelity_mlp_path):
+                pipeline.fidelity_mlp = FidelityMLP.from_pretrained(fidelity_mlp_path)
+            else:
+                # Create a new one if path doesn't exist
+                pipeline.fidelity_mlp = FidelityMLP(hidden_size)
+                logger.warning(
+                    f"Fidelity MLP not found at {fidelity_mlp_path}, initialized a new one with hidden size {hidden_size}"
+                )
+            
+            # Move to the same device as the pipeline
+            pipeline.fidelity_mlp.to(pipeline.device)
+        
+        return pipeline

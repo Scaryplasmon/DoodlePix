@@ -20,6 +20,8 @@ __pycache__/
 /validation_results/
 # C extensions
 *.so
+*.zip
+
 
 # Distribution / packaging
 .Python

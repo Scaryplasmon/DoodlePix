@@ -15,12 +15,12 @@ def replace_in_files(folder_path):
                 print(f"Original content: {content.strip()}")
                 
                 # Replace the text and track changes
-                if ', <tags:' in content:
-                    modified_content = content.replace(', <tags:', ',')
-                    print("Removed , <tags:")
+                if ' grey background' in content:
+                    modified_content = content.replace(' grey background', ' white background')
+                    print("Removed bg")
                 else:
                     modified_content = content
-                    print("No , <tags: found to remove")
+                    print("No bg found")
 
                 if modified_content != content:
                     # Write back to the file only if changes were made
@@ -34,7 +34,7 @@ def replace_in_files(folder_path):
                 print(f"Error processing {filename}: {e}")
 
 # Use the script
-folder_path = "DoodlePixV5_WIP/edit_prompt/"  # Replace with your folder path
+folder_path = "DoodlePixV6/thicks/"  # Replace with your folder path
 # s = ["fantasy", "whimsical", "steampunk", "sci-fi"]
 replace_in_files(folder_path)
 

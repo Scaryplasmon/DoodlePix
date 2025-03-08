@@ -7,6 +7,16 @@ in this case the input image is a doodle and the text prompt has this shape exam
 f=5, [flat], <tags: gold, shield, diamond, currency, emblem>,   #f9c473, #cb6240, #fdfcf8, #ffffff background.
 
 
+ALMMOST THERE WITH THE DATA
+
+copy paste input edges (1) inside the Edited image folder, 
+compare them briefly, use Data manager to remove or improve input edges
+
+NEED more low values fidelity, more quick bad drawings
+
+add black f0 values images( might be a cool idea)
+
+
 Training results:
 - FidelityMLP still to be implemented in the actual pipeline (was giving issues like size 78 exceeds token limits of ClipTextEncoder which is 77)
 - Training with txtEncoder requiring grad kept giving errors so we split the training into two parts:

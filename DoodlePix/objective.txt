@@ -1,0 +1,50 @@
+
+DoodlePix is a app that allows you to draw on a canvas and generate images from your drawings.
+So the user will draw on the left, click a button and generate and visualize the image on the right.
+
+Structure
+"drawing" viewport on the left 
+"generating" viewport on the right
+
+All the buttons must have icons and when hovered, a tooltip must appear with the button name
+
+
+The drawing viewport must be solid black before i draw on it.
+
+On the Drawing viewport, in a column on the left, there is a list of buttons
+1- draw or erase button (on draws, off erases) (the drawing line must always be white)
+2- color picker button (opens a color picker and a color wheel to choose the color i want to draw the shape with)
+3- Drawing shape button draws a lasso and fills it with the active color in the color picker
+4- undo button (undoes the last action)
+5- redo button (redoes the last action)
+6- clear button (clears the drawing)
+7- save button (saves the drawing)
+8- brush settings (opens the brush settings menu, in which we can change texture, size, hardness, opacity etc...)
+
+
+In Between the drawing viewport and the generating viewport, there is a button to generate the image.
+and two buttons underneath to go back to the previous and next image in the history of the generated images.
+
+On the right side, in the generating viewport in the right corner on the side of the generated image
+1- a browse button to browse in the local foders to find the path of the model
+2- a text box for the prompt
+3- a choice list to select the scheduler
+3- various sliders for the steps, guidance scale, seed based on the inference
+4- a bool to Reload the new pipeline, or use the previous one during generation. so that i dont have to reload it each time.
+
+Color Palette:
+blac background, pastel color buttons
+rounded corners wherever possible
+
+a list of shortcuts:
+Ctrl + S : save the drawing
+Ctrl + Z : undo
+Ctrl + shift + Z : redo
+Ctrl + G : generate the image
+
+
+
+
+
+
+
