@@ -9,120 +9,19 @@ f=5, [flat], <tags: gold, shield, diamond, currency, emblem>,   #f9c473, #cb6240
 
 
 
-![My Image](assets/axe.png)  
-[![Video 1](assets/AxeNormal.mp4)](assets/AxeNormal.mp4)  
-[![Video 2](https://via.placeholder.com/150?text=Video+2)](https://link-to-video2.mp4)  
-[![Video 3](https://via.placeholder.com/150?text=Video+3)](https://link-to-video3.mp4)  
-[![Video 4](https://via.placeholder.com/150?text=Video+4)](https://link-to-video4.mp4)
-
-<!-- Row 1: 1 image + 4 videos -->
-<div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
-  <!-- Replace with your image URL -->
-  <img src="assets/axe.png" alt="Input Doodle" width="150" height="150">
-
-  <!-- Video 1 -->
-  <video width="150" height="150" controls>
-    <source src="assets/AxeNormal.mp4" type="video/mp4">
-    Your browser does not support the video tag.
-  </video>
-
-  <!-- Video 2 -->
-  <video width="150" height="150" controls>
-    <source src="assets/Axe3D.mp4" type="video/mp4">
-    Your browser does not support the video tag.
-  </video>
-
-  <!-- Video 3 -->
-  <video width="150" height="150" controls>
-    <source src="assets/AxeOutline.mp4" type="video/mp4">
-    Your browser does not support the video tag.
-  </video>
-
-  <!-- Video 4 -->
-  <video width="150" height="150" controls>
-    <source src="assets/AxeFlat.mp4" type="video/mp4">
-    Your browser does not support the video tag.
-  </video>
-</div>
-
-<!-- Row 2: 1 image + 3 videos -->
-<div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 20px;">
-  <!-- Replace with your image URL -->
-  <img src="https://via.placeholder.com/150" alt="My Image" width="150" height="150">
-
-  <!-- Video 5 -->
-  <video width="150" height="150" controls>
-    <source src="path/to/video5.mp4" type="video/mp4">
-    Your browser does not support the video tag.
-  </video>
-
-  <!-- Video 6 -->
-  <video width="150" height="150" controls>
-    <source src="path/to/video6.mp4" type="video/mp4">
-    Your browser does not support the video tag.
-  </video>
-
-  <!-- Video 7 -->
-  <video width="150" height="150" controls>
-    <source src="path/to/video7.mp4" type="video/mp4">
-    Your browser does not support the video tag.
-  </video>
-</div>
-
-
-
 <table>
   <tr>
-    <td>
-      <img src="assets/axe.png" alt="Input Doodle" width="150" height="150">
-    </td>
-    <td>
-      <video width="150" height="150" controls>
-        <source src="assets/AxeNormal.mp4" type="video/mp4">
-        Your browser does not support the video tag.
-      </video>
-    </td>
-    <td>
-      <video width="150" height="150" controls>
-        <source src="assets/Axe3D.mp4" type="video/mp4">
-        Your browser does not support the video tag.
-      </video>
-    </td>
-    <td>
-      <video width="150" height="150" controls>
-        <source src="assets/AxeOutline.mp4" type="video/mp4">
-        Your browser does not support the video tag.
-      </video>
-    </td>
-    <td>
-      <video width="150" height="150" controls>
-        <source src="assets/AxeFlat.mp4" type="video/mp4">
-        Your browser does not support the video tag.
-      </video>
-    </td>
+    <td><img src="assets/axe.png" alt="Image" width="150" height="150"></td>
+    <td><img src="assets/AxeNormal.gif" alt="Normal" width="150" height="150"></td>
+    <td><img src="assets/Axe3D.gif" alt="3D" width="150" height="150"></td>
+    <td><img src="assets/AxeOutline.gif" alt="Outline" width="150" height="150"></td>
+    <td><img src="assets/AxeFlat.gif" alt="Flat" width="150" height="150"></td>
   </tr>
   <tr>
-    <td>
-      <img src="https://via.placeholder.com/150" alt="My Image" width="150" height="150">
-    </td>
-    <td>
-      <video width="150" height="150" controls>
-        <source src="path/to/video5.mp4" type="video/mp4">
-        Your browser does not support the video tag.
-      </video>
-    </td>
-    <td>
-      <video width="150" height="150" controls>
-        <source src="path/to/video6.mp4" type="video/mp4">
-        Your browser does not support the video tag.
-      </video>
-    </td>
-    <td>
-      <video width="150" height="150" controls>
-        <source src="path/to/video7.mp4" type="video/mp4">
-        Your browser does not support the video tag.
-      </video>
-    </td>
+    <td><img src="image.png" alt="Image" width="150" height="150"></td>
+    <td><img src="video5.gif" alt="GIF 5" width="150" height="150"></td>
+    <td><img src="video6.gif" alt="GIF 6" width="150" height="150"></td>
+    <td><img src="video7.gif" alt="GIF 7" width="150" height="150"></td>
   </tr>
 </table>
 
