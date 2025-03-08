@@ -7,6 +7,64 @@ in this case the input image is a doodle and the text prompt has this shape exam
 f=5, [flat], <tags: gold, shield, diamond, currency, emblem>,   #f9c473, #cb6240, #fdfcf8, #ffffff background.
 
 
+
+
+<table>
+  <tr>
+    <td>
+      <img src="assets/axe.png" alt="Input Doodle" width="150" height="150">
+    </td>
+    <td>
+      <video width="150" height="150" controls>
+        <source src="assets/AxeNormal.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+    </td>
+    <td>
+      <video width="150" height="150" controls>
+        <source src="assets/Axe3D.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+    </td>
+    <td>
+      <video width="150" height="150" controls>
+        <source src="assets/AxeOutline.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+    </td>
+    <td>
+      <video width="150" height="150" controls>
+        <source src="assets/AxeFlat.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+    </td>
+  </tr>
+  <tr>
+    <td>
+      <img src="https://via.placeholder.com/150" alt="My Image" width="150" height="150">
+    </td>
+    <td>
+      <video width="150" height="150" controls>
+        <source src="path/to/video5.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+    </td>
+    <td>
+      <video width="150" height="150" controls>
+        <source src="path/to/video6.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+    </td>
+    <td>
+      <video width="150" height="150" controls>
+        <source src="path/to/video7.mp4" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+    </td>
+  </tr>
+</table>
+
+
 ALMMOST THERE WITH THE DATA
 
 copy paste input edges (1) inside the Edited image folder, 
