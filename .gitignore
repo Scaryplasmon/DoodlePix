@@ -14,7 +14,10 @@ __pycache__/
 /train2/
 /iconix2pix_V2/
 /models/
-
+/data/
+/HFmodels/
+/DoodlesTests/
+/validation_results/
 # C extensions
 *.so
 
@@ -188,3 +191,4 @@ cython_debug/
 README_sdxl.md
 READMEdiffusers.md
 /TXTEncoder_DoodlePixV2
+.cursorignore
