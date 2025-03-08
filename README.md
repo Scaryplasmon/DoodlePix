@@ -9,6 +9,63 @@ f=5, [flat], <tags: gold, shield, diamond, currency, emblem>,   #f9c473, #cb6240
 
 
 
+
+<!-- Row 1: 1 image + 4 videos -->
+<div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
+  <!-- Replace with your image URL -->
+  <img src="assets/axe.png" alt="Input Doodle" width="150" height="150">
+
+  <!-- Video 1 -->
+  <video width="150" height="150" controls>
+    <source src="assets/AxeNormal.mp4" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
+
+  <!-- Video 2 -->
+  <video width="150" height="150" controls>
+    <source src="assets/Axe3D.mp4" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
+
+  <!-- Video 3 -->
+  <video width="150" height="150" controls>
+    <source src="assets/AxeOutline.mp4" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
+
+  <!-- Video 4 -->
+  <video width="150" height="150" controls>
+    <source src="assets/AxeFlat.mp4" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
+</div>
+
+<!-- Row 2: 1 image + 3 videos -->
+<div style="display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 20px;">
+  <!-- Replace with your image URL -->
+  <img src="https://via.placeholder.com/150" alt="My Image" width="150" height="150">
+
+  <!-- Video 5 -->
+  <video width="150" height="150" controls>
+    <source src="path/to/video5.mp4" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
+
+  <!-- Video 6 -->
+  <video width="150" height="150" controls>
+    <source src="path/to/video6.mp4" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
+
+  <!-- Video 7 -->
+  <video width="150" height="150" controls>
+    <source src="path/to/video7.mp4" type="video/mp4">
+    Your browser does not support the video tag.
+  </video>
+</div>
+
+
+
 <table>
   <tr>
     <td>
