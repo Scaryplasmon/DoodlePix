@@ -4,11 +4,12 @@ Diffusion based Drawing Assistant
 This repo is a custom implementation of the InstructPix2Pix model, a text-to-image generation model that uses a text encoder to generate images from text prompts and input images.
 in this case the input image is a doodle and the text prompt has this shape example:
 
-f=5, [flat], <tags: gold, shield, diamond, currency, emblem>,   #f9c473, #cb6240, #fdfcf8, #ffffff background.
 
-
-
-
+<img src="assets/axe.png" alt="Image" width="150" height="150">
+<img src="assets/AxeNormal.gif" alt="GIF 1" width="150" height="150">
+<img src="assets/Axe3D.gif" alt="3D" width="150" height="150">
+<img src="assets/AxeOutline.gif" alt="Outline" width="150" height="150">
+<img src="assets/AxeFlat.gif" alt="Flat" width="150" height="150">
 <table>
   <tr>
     <td><img src="assets/axe.png" alt="Image" width="150" height="150"></td>
