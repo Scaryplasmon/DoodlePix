@@ -9,6 +9,11 @@ f=5, [flat], <tags: gold, shield, diamond, currency, emblem>,   #f9c473, #cb6240
 
 
 
+![My Image](assets/axe.png)  
+[![Video 1](assets/AxeNormal.mp4)](assets/AxeNormal.mp4)  
+[![Video 2](https://via.placeholder.com/150?text=Video+2)](https://link-to-video2.mp4)  
+[![Video 3](https://via.placeholder.com/150?text=Video+3)](https://link-to-video3.mp4)  
+[![Video 4](https://via.placeholder.com/150?text=Video+4)](https://link-to-video4.mp4)
 
 <!-- Row 1: 1 image + 4 videos -->
 <div style="display: flex; align-items: center; justify-content: center; gap: 10px;">
