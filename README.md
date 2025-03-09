@@ -1,10 +1,43 @@
 # DoodlePix
 Diffusion based Drawing Assistant
 
-This is a custom implementation of the InstructPix2Pix pipeline 
+
+https://github.com/user-attachments/assets/b6a44dc0-6d01-4285-a5ad-9f6fedf91656
 
 
--Gifs shows Results (keeping prompt and seed constant) while varying fidelity values from 0 to 9
+This is a custom implementation of the InstructPix2Pix pipeline.
+
+
+Objective is to analyze the subtle difference between canny edges and hand-made drawings.
+
+While the first just extracts precisely the most prominent lines in an image,
+drawings are made with intention, a few squiggly lines placed in the right place can deliver a much better idea of what's being represented in the image:
+
+<table>
+  <tr>
+    <td style="text-align: center;">
+      <strong>Drawing</strong><br>
+      <img src="assets/axe.png" alt="Drawing" width="200" height="200">
+    </td>
+    <td style="text-align: center;">
+      <strong>Canny</strong><br>
+      <img src="assets/axe.png" alt="Canny" width="200" height="200">
+    </td>
+  </tr>
+</table>
+
+To address this I train a Fidelity embedding to inject an explicit fidelity signal to the Unet that learns how to modulate its denoising behaviour accordingly.
+
+The FidelityMLP ranges from 0 to 9, (f0-f9), allowing the user to choose how much the model should "correct" their drawing.
+
+The InstructPix2Pix pipeline already supports an ImageGuidance factor, that can be passed during inference to control how much the model should follow the Image Input; 
+
+but this results only in higher values following TOO Much the drawing input, 
+while lower values completely lose composition and its nuisances.
+
+## Fidelity embedding in action
+
+-Fidelity values from 0 to 9 while keeping prompt and seed constant.
 <table>
   <tr>
     <td colspan="5" style="text-align: center; font-weight: bold; padding-bottom: 8px;">
@@ -83,6 +116,7 @@ This is a custom implementation of the InstructPix2Pix pipeline
   </tr>
 </table>
 
+the model is to achieve acceptable 
 
 
 ALMMOST THERE WITH THE DATA
