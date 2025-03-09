@@ -1,12 +1,16 @@
 # DoodlePix
 Diffusion based Drawing Assistant
 
-This repo is a custom implementation of the InstructPix2Pix model, a text-to-image generation model that uses a text encoder to generate images from text prompts and input images.
-in this case the input image is a doodle and the text prompt has this shape example:
+This is a custom implementation of the InstructPix2Pix pipeline 
 
 
-
+-Gifs shows Results (keeping prompt and seed constant) while varying fidelity values from 0 to 9
 <table>
+  <tr>
+    <td colspan="5" style="text-align: center; font-weight: bold; padding-bottom: 8px;">
+      Prompt: axe, metal, wooden handle. grey metal, brown wood, grey background. 
+    </td>
+  </tr>
   <tr>
     <td style="text-align: center;">
       <strong>Image</strong><br>
@@ -29,6 +33,13 @@ in this case the input image is a doodle and the text prompt has this shape exam
       <img src="assets/AxeFlat.gif" alt="Flat" width="124" height="124">
     </td>
   </tr>
+</table>
+<table>
+  <tr>
+    <td colspan="5" style="text-align: center; font-weight: bold; padding-bottom: 8px;">
+      Prompt: potion, bottle, cork. blue, brown, black background.
+    </td>
+  </tr>
   <tr>
     <td style="text-align: center;">
       <strong>Image</strong><br>
@@ -45,6 +56,11 @@ in this case the input image is a doodle and the text prompt has this shape exam
     <td style="text-align: center;">
       <strong>Outline</strong><br>
       <img src="assets/PotionOutline.gif" alt="Outline" width="124" height="124">
+    </td>
+  </tr>
+  <tr>
+    <td colspan="4" style="text-align: center; font-weight: bold; padding-bottom: 8px;">
+      Prompt: torch, flame, wood, string. brown, vibrant red, orange background.
     </td>
   </tr>
   <tr>
