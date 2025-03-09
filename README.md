@@ -7,41 +7,44 @@ https://github.com/user-attachments/assets/b6a44dc0-6d01-4285-a5ad-9f6fedf91656
 
 This is a custom implementation of the InstructPix2Pix pipeline.
 
+<details>
+  <summary><strong>Click to view pipeline details</strong></summary>
+  Objective is to analyze the subtle difference between canny edges and hand-made drawings.
 
-Objective is to analyze the subtle difference between canny edges and hand-made drawings.
-
-While the first just extracts precisely the most prominent lines in an image,
-drawings are made with intention, a few squiggly lines placed in the right place can deliver a much better idea of what's being represented in the image:
-
-<table>
-  <tr>
-    <td style="text-align: center;">
-      <strong>Drawing</strong><br>
-      <img src="assets/axe.png" alt="Drawing" width="200" height="200">
-    </td>
-    <td style="text-align: center;">
-      <strong>Canny</strong><br>
-      <img src="assets/axe.png" alt="Canny" width="200" height="200">
-    </td>
-  </tr>
-</table>
-
-To address this I train a Fidelity embedding to inject an explicit fidelity signal to the Unet that learns how to modulate its denoising behaviour accordingly.
-
-The FidelityMLP ranges from 0 to 9, (f0-f9), allowing the user to choose how much the model should "correct" their drawing.
-
-The InstructPix2Pix pipeline already supports an ImageGuidance factor, that can be passed during inference to control how much the model should follow the Image Input; 
-
-but this results only in higher values following TOO Much the drawing input, 
-while lower values completely lose composition and its nuisances.
-
+  
+  While the first just extracts precisely the most prominent lines in an image,
+  drawings are made with intention, a few squiggly lines placed in the right place can deliver a much better idea of what's being represented in the image:
+  
+  <table>
+    <tr>
+      <td style="text-align: center;">
+        <strong>Drawing</strong><br>
+        <img src="assets/alienDrawing.png" alt="Drawing" width="240" height="240">
+      </td>
+      <td style="text-align: center;">
+        <strong>Canny</strong><br>
+        <img src="assets/alienCanny.png" alt="Canny" width="240" height="240">
+      </td>
+    </tr>
+  </table>
+  
+  To address this I train a Fidelity embedding to inject an explicit fidelity signal to the Unet that learns how to modulate its denoising behaviour accordingly.
+  
+  The FidelityMLP ranges from 0 to 9, (f0-f9), allowing the user to choose how much the model should "correct" their drawing.
+  
+  The InstructPix2Pix pipeline already supports an ImageGuidance factor, that can be passed during inference to control how much the model should follow the Image Input; 
+  
+  but this results only in higher values following TOO Much the drawing input, 
+  while lower values completely lose composition and its nuisances.
+    
+</details>
 ## Fidelity embedding in action
 
 -Fidelity values from 0 to 9 while keeping prompt and seed constant.
 <table>
   <tr>
     <td colspan="5" style="text-align: center; font-weight: bold; padding-bottom: 8px;">
-      Prompt: axe, metal, wooden handle. grey metal, brown wood, grey background. 
+      Prompt: axe, metal, wooden handle. grey, brown wood
     </td>
   </tr>
   <tr>
@@ -67,6 +70,10 @@ while lower values completely lose composition and its nuisances.
     </td>
   </tr>
 </table>
+
+<details>
+  <summary><strong>More examples</strong></summary>
+
 <table>
   <tr>
     <td colspan="5" style="text-align: center; font-weight: bold; padding-bottom: 8px;">
@@ -93,7 +100,7 @@ while lower values completely lose composition and its nuisances.
   </tr>
   <tr>
     <td colspan="4" style="text-align: center; font-weight: bold; padding-bottom: 8px;">
-      Prompt: torch, flame, wood, string. brown, vibrant red, orange background.
+      Prompt: torch, flame, wood, string. brown, vibrant red
     </td>
   </tr>
   <tr>
@@ -116,7 +123,87 @@ while lower values completely lose composition and its nuisances.
   </tr>
 </table>
 
-the model is to achieve acceptable 
+</details>
+
+
+DoodlePix shows great color fidelity, byproduct of the InstructPix2Pix architecture, especially at higher fidelity values. (WIP - implement color loss)
+
+<table>
+  <tr>
+    <td colspan="8" style="text-align: center; font-weight: bold; padding-bottom: 8px;">
+      Prompt: flower, stylized. *color, green, white
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align: center;">
+      <strong></strong><br>
+      <img src="assets/flowerInput.png" alt="Image" width="100" height="100">
+    </td>
+    <td style="text-align: center;">
+      <strong>red</strong><br>
+      <img src="assets/flower2.png" alt="Normal" width="100" height="100">
+    </td>
+    <td style="text-align: center;">
+      <strong>light blue</strong><br>
+      <img src="assets/flower3.png" alt="3D" width="100" height="100">
+    </td>
+    <td style="text-align: center;">
+      <strong>purple</strong><br>
+      <img src="assets/flower4.png" alt="Outline" width="100" height="100">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align: center;">
+      <strong>green</strong><br>
+      <img src="assets/flower1.png" alt="Flat" width="100" height="100">
+    </td>
+    <td style="text-align: center;">
+      <strong>cyan</strong><br>
+      <img src="assets/flower6.png" alt="Flat" width="100" height="100">
+    </td>
+    <td style="text-align: center;">
+      <strong>light green</strong><br>
+      <img src="assets/flower7.png" alt="Flat" width="100" height="100">
+    </td>
+    <td style="text-align: center;">
+      <strong>orange</strong><br>
+      <img src="assets/flower8.png" alt="Flat" width="100" height="100">
+    </td>
+  </tr>
+</table>
+
+
+The model is able to achieve acceptable results within 4 steps
+
+<table>
+  <tr>
+    <td colspan="5" style="text-align: center; font-weight: bold; padding-bottom: 8px;">
+      Prompt: alien, shirt. vibrant red, blue
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align: center;">
+      <strong>Drawing Input</strong><br>
+      <img src="assets/alien_Doodle.png" alt="Image" width="150" height="150">
+    </td>
+    <td style="text-align: center;">
+      <strong>4 steps</strong><br>
+      <img src="assets/alien_2.png" alt="Image" width="150" height="150">
+    </td>
+    <td style="text-align: center;">
+      <strong>50 steps</strong><br>
+      <img src="assets/alien_0.png" alt="Image" width="150" height="150">
+    </td>
+  </tr>
+</table>
+
+Moreover, I've noticed that increasing the steps above a certain threshold (30-60 steps) can increase output quality at the expense of color fidelity.
+
+
+
+
+
+
 
 
 ALMMOST THERE WITH THE DATA
