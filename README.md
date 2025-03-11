@@ -194,7 +194,7 @@ More Examples
 
 The model shows great color understanding as a byproduct of the InstructPix2Pix architecture.
 
-<table style="width:100%; table-layout: fixed;">
+<table style="width:100%; height: 124px; table-layout: fixed;">
   <tr>
     <td colspan="8" style="text-align:center; font-weight:bold; font-size:0.9rem; padding-bottom:8px;">
       Prompt: f9, flower, stylized. *color, green, white
@@ -250,11 +250,11 @@ The model generates acceptable results with as little as 4 steps.
       <img src="assets/alien/alienDrawing.png" alt="Alien Drawing" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>4</strong><br>
+      <strong>4 </strong><br>
       <img src="assets/alien/AlienD_4steps.png" alt="Alien 4" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>8</strong><br>
+      <strong>8 </strong><br>
       <img src="assets/alien/AlienD_8steps.png" alt="Alien 8" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
@@ -292,11 +292,11 @@ The model generates acceptable results with as little as 4 steps.
       <img src="assets/alien/alienCanny.png" alt="Alien Canny" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>4</strong><br>
+      <strong>4 </strong><br>
       <img src="assets/alien/AlienC_4steps.png" alt="Alien Canny 4" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>8</strong><br>
+      <strong>8 </strong><br>
       <img src="assets/alien/AlienC_8steps.png" alt="Alien Canny 8" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
