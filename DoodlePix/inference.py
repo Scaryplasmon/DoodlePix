@@ -19,20 +19,12 @@ class InferenceHandler:
         import torch
         from diffusers import (
             StableDiffusionInstructPix2PixPipeline,
-            DDIMScheduler,
-            DDPMScheduler,
-            PNDMScheduler,
             EulerAncestralDiscreteScheduler,
-            DPMSolverMultistepScheduler
         )
         
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.schedulers = {
-            "DDIM": DDIMScheduler,
-            "DDPM": DDPMScheduler,
-            "PNDM": PNDMScheduler,
             "Euler Ancestral": EulerAncestralDiscreteScheduler,
-            "DPM++ 2M": DPMSolverMultistepScheduler
         }
         
         self._torch = torch
@@ -41,9 +33,9 @@ class InferenceHandler:
         
     def get_scheduler_names(self):
         """Get list of available schedulers without loading ML stuff"""
-        return ["DDIM", "DDPM", "PNDM", "Euler Ancestral", "DPM++ 2M"]
+        return ["Euler Ancestral"]
         
-    def load_model(self, model_path, scheduler_name="DDIM"):
+    def load_model(self, model_path, scheduler_name="Euler Ancestral"):
         """Load the model from path"""
         try:
             self._lazy_setup()
@@ -69,7 +61,7 @@ class InferenceHandler:
             print(f"Error loading model: {e}")
             return False
         
-    def load_model(self, model_path, scheduler_name="DDIM"):
+    def load_model(self, model_path, scheduler_name="Euler Ancestral"):
         """Load the model from path"""
         try:
             self._lazy_setup()
