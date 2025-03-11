@@ -250,32 +250,32 @@ The model generates acceptable results with as little as 4 steps.
       <img src="assets/alien/alienDrawing.png" alt="Alien Drawing" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>4 steps</strong><br>
-      <img src="assets/alien/AlienD_4steps.png" alt="Alien 4 steps" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <strong>4</strong><br>
+      <img src="assets/alien/AlienD_4steps.png" alt="Alien 4" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>8 steps</strong><br>
-      <img src="assets/alien/AlienD_8steps.png" alt="Alien 8 steps" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <strong>8</strong><br>
+      <img src="assets/alien/AlienD_8steps.png" alt="Alien 8" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>14 steps</strong><br>
-      <img src="assets/alien/AlienD_14steps.png" alt="Alien 14 steps" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <strong>14</strong><br>
+      <img src="assets/alien/AlienD_14steps.png" alt="Alien 14" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>20 steps</strong><br>
-      <img src="assets/alien/AlienD_20steps.png" alt="Alien 20 steps" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <strong>20</strong><br>
+      <img src="assets/alien/AlienD_20steps.png" alt="Alien 20" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>32 steps</strong><br>
-      <img src="assets/alien/AlienD_32steps.png" alt="Alien 32 steps" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <strong>32</strong><br>
+      <img src="assets/alien/AlienD_32steps.png" alt="Alien 32" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>44 steps</strong><br>
-      <img src="assets/alien/AlienD_44steps.png" alt="Alien 44 steps" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <strong>44</strong><br>
+      <img src="assets/alien/AlienD_44steps.png" alt="Alien 44" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>60 steps</strong><br>
-      <img src="assets/alien/AlienD_60steps.png" alt="Alien 60 steps" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <strong>60</strong><br>
+      <img src="assets/alien/AlienD_60steps.png" alt="Alien 60" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
   </tr>
 </table>
@@ -292,32 +292,32 @@ The model generates acceptable results with as little as 4 steps.
       <img src="assets/alien/alienCanny.png" alt="Alien Canny" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>4 steps</strong><br>
-      <img src="assets/alien/AlienC_4steps.png" alt="Alien Canny 4 steps" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <strong>4</strong><br>
+      <img src="assets/alien/AlienC_4steps.png" alt="Alien Canny 4" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>8 steps</strong><br>
-      <img src="assets/alien/AlienC_8steps.png" alt="Alien Canny 8 steps" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <strong>8</strong><br>
+      <img src="assets/alien/AlienC_8steps.png" alt="Alien Canny 8" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>14 steps</strong><br>
-      <img src="assets/alien/AlienC_14steps.png" alt="Alien Canny 14 steps" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <strong>14</strong><br>
+      <img src="assets/alien/AlienC_14steps.png" alt="Alien Canny 14" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>20 steps</strong><br>
-      <img src="assets/alien/AlienC_20steps.png" alt="Alien Canny 20 steps" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <strong>20</strong><br>
+      <img src="assets/alien/AlienC_20steps.png" alt="Alien Canny 20" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>32 steps</strong><br>
-      <img src="assets/alien/AlienC_32steps.png" alt="Alien Canny 32 steps" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <strong>32</strong><br>
+      <img src="assets/alien/AlienC_32steps.png" alt="Alien Canny 32" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>44 steps</strong><br>
-      <img src="assets/alien/AlienC_44steps.png" alt="Alien Canny 44 steps" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <strong>44</strong><br>
+      <img src="assets/alien/AlienC_44steps.png" alt="Alien Canny 44" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <strong>60 steps</strong><br>
-      <img src="assets/alien/AlienC_60steps.png" alt="Alien Canny 60 steps" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <strong>60</strong><br>
+      <img src="assets/alien/AlienC_60steps.png" alt="Alien Canny 60" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
     </td>
   </tr>
 </table>
