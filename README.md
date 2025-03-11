@@ -135,36 +135,37 @@ This is a custom implementation of the InstructPix2Pix pipeline.
 
 More examples:
 
-<table>
+
+<table style="width: 100%; table-layout: fixed;">
   <tr>
-    <td colspan="2" style="text-align: center; font-weight: bold; padding-bottom: 8px;">
+    <td colspan="2" style="text-align: center; font-weight: bold; font-size: 0.9rem; padding-bottom: 8px;">
       Prompt: f*, potion, bottle, cork. blue, brown, black background.
     </td>
-    <td colspan="2" style="text-align: center; font-weight: bold; padding-bottom: 8px;">
+    <td colspan="2" style="text-align: center; font-weight: bold; font-size: 0.9rem; padding-bottom: 8px;">
       Prompt: f*, maul, hammer. gray, brown, white background.
     </td>
-    <td colspan="2" style="text-align: center; font-weight: bold; padding-bottom: 8px;">
+    <td colspan="2" style="text-align: center; font-weight: bold; font-size: 0.9rem; padding-bottom: 8px;">
       Prompt: f*, torch, flame. red, brown, black background.
     </td>
   </tr>
   <tr>
     <td style="text-align: center;">
-      <img src="assets/potion.png" alt="Potion Image" width="100" height="100">
+      <img src="assets/potion.png" alt="Potion Image" style="width: 100%; max-width: 150px; height: auto; object-fit: contain;">
     </td>
     <td style="text-align: center;">
-      <img src="assets/PotionSingle.gif" alt="Potion Normal" width="100" height="100">
+      <img src="assets/PotionSingle.gif" alt="Potion Normal" style="width: 100%; max-width: 150px; height: auto; object-fit: contain;">
     </td>
     <td style="text-align: center;">
-      <img src="assets/maul.png" alt="Maul Image" width="100" height="100">
+      <img src="assets/maul.png" alt="Maul Image" style="width: 100%; max-width: 150px; height: auto; object-fit: contain;">
     </td>
     <td style="text-align: center;">
-      <img src="assets/maulNormal.gif" alt="Maul Normal" width="100" height="100">
+      <img src="assets/maulNormal.gif" alt="Maul Normal" style="width: 100%; max-width: 150px; height: auto; object-fit: contain;">
     </td>
     <td style="text-align: center;">
-      <img src="assets/torch.png" alt="Torch Image" width="100" height="100">
+      <img src="assets/torch.png" alt="Torch Image" style="width: 100%; max-width: 150px; height: auto; object-fit: contain;">
     </td>
     <td style="text-align: center;">
-      <img src="assets/TorchSingle.gif" alt="Torch Normal" width="100" height="100">
+      <img src="assets/TorchSingle.gif" alt="Torch Normal" style="width: 100%; max-width: 150px; height: auto; object-fit: contain;">
     </td>
   </tr>
 </table>
