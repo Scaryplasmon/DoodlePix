@@ -362,29 +362,3 @@ The model generates acceptable results with as little as 4 steps.
 </details>
 
 
-
-
-
-
-
-- [ ] check all normal folders for painted items, delete them all using the DataManager app
-- [ ] separate normal and painted [Shading]
-- [ ] resize images an save them as tris (use the ImageProcessor App)
-
-- [ ] Halo? High low Contrast, Vibrant, Tags?
-- [ ] Token Analysis
-- [ ] Plot Colors in data, visualize most common tags, 
-- [ ] f = fidelity, (0-9) HED f = 9, Canny f = 10, Scribble f = 3, Other Scribble f = 7
-- [ ] p = shading, (flat, painted, 3D, outline)
-- [ ] remove <tags:> from prompts ?
-
-f=5, p=flat, bench, #f9c473, #cb6240, #fdfcf8, #ffffff background, <tags: gold, shield, diamond, currency, emblem>
-
-- [ ] Dataset to train general use IpAdapter: controlnet canny + style with Flux Redux at low intensity
-
---REPORTS
-
-Colors dont follow the prompt, they are random, and change a ton from seed to seed.
---Training with txtEncoder requiring grad kept giving errors
---tried training in BF16 but noticed quite some worsening in the results
---PreTrained txtEncoder in FP32 then load it into unet FP16 training.

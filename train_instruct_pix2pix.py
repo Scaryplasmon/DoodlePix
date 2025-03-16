@@ -1,7 +1,8 @@
-"""Script to fine-tune Stable Diffusion for InstructPix2Pix."""
+"""
+    Custom implementation of InstructPix2Pix training script from the diffusers repo
+    https://github.com/huggingface/diffusers/blob/main/examples/instruct_pix2pix/train_instruct_pix2pix.py
 
-"""The training verts around trying to teach model to generate images based on B&W doodles or drawings. so the input_image is a black background and white line drawing, the edited_image is the end result colored icon, the edit prompt is the text prompt that describes the edited image for the model to follow."""
-
+"""
 import argparse
 import logging
 import math
@@ -9,7 +10,6 @@ import os
 import shutil
 from contextlib import nullcontext
 from pathlib import Path
-import itertools
 import accelerate
 import datasets
 import numpy as np
@@ -39,14 +39,12 @@ from diffusers.utils.import_utils import is_xformers_available
 from diffusers.utils.torch_utils import is_compiled_module
 from datasets import Dataset, Image
 from PIL import Image as PILImage
-from peft import PeftModel
 import glob
 from fidelity_mlp import FidelityMLP
 
 if is_wandb_available():
     import wandb
 
-# Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.33.0.dev0")
 
 logger = get_logger(__name__, log_level="INFO")
@@ -66,7 +64,6 @@ def log_validation(
     try:
         logger.info("Running validation...")
         
-        # Create validation directory with epoch/step subdirectory
         validation_dir = os.path.join(args.output_dir, "validation")
         current_step = accelerator.step
         step_dir = os.path.join(validation_dir, f"step_{current_step}")
@@ -76,7 +73,7 @@ def log_validation(
         pipeline.set_progress_bar_config(disable=True)
         
         # Get all validation images and their corresponding prompts
-        val_images_dir = args.val_images_dir  # New argument needed
+        val_images_dir = args.val_images_dir
         try:
             image_files = [f for f in os.listdir(val_images_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
         except (FileNotFoundError, OSError) as e:
@@ -85,15 +82,13 @@ def log_validation(
         
         logger.info(f"Found {len(image_files)} validation images")
         
-        edited_images_dict = {}  # Store images for wandb logging
-        
+        edited_images_dict = {}
         if torch.backends.mps.is_available():
             autocast_ctx = nullcontext()
         else:
             autocast_ctx = torch.autocast(accelerator.device.type)
 
-        # Define fidelity levels to test
-        fidelity_levels = [2, 8]  # Low, medium, high fidelity
+        fidelity_levels = [2, 8]  # Low, high fidelity
         
         with autocast_ctx:
             for image_file in image_files:
@@ -102,33 +97,27 @@ def log_validation(
                     image_path = os.path.join(val_images_dir, image_file)
                     prompt_path = os.path.join(val_images_dir, f"{base_name}.txt")
                     
-                    # Skip if prompt file doesn't exist
                     if not os.path.exists(prompt_path):
                         logger.warning(f"Skipping {image_file} - no corresponding prompt file found")
                         continue
                         
-                    # Read prompt
                     with open(prompt_path, 'r', encoding='utf-8') as f:
                         validation_prompt = f.read().strip()
                         
-                    # Load and process original image
                     original_image = PILImage.open(image_path).convert("RGB")
                     
-                    # Save original image
                     try:
                         original_image.save(os.path.join(step_dir, f"original_{base_name}.png"))
                     except Exception as e:
                         logger.error(f"Failed to save original image {base_name}: {e}")
                         continue
 
-                    # Generate edited images with different fidelity levels
                     edited_images = []
                     for fidelity in fidelity_levels:
                         generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
                         fidelity_prompt = f"f{fidelity} {validation_prompt}"
                         
                         try:
-                            # Generate image with this fidelity level
                             edited_image = pipeline(
                                 fidelity_prompt,
                                 negative_prompt="NSFW, nudity, bad, blurry, sex",
@@ -140,11 +129,9 @@ def log_validation(
                                 safety_checker=None
                             ).images[0]
                             
-                            # Save edited image with fidelity level in filename
                             edited_image.save(os.path.join(step_dir, f"edited_{base_name}_f{fidelity}.png"))
                             edited_images.append(edited_image)
                             
-                            # Save prompt with fidelity
                             with open(os.path.join(step_dir, f"prompt_{base_name}_f{fidelity}.txt"), "w") as f:
                                 f.write(fidelity_prompt)
                                 
@@ -153,7 +140,7 @@ def log_validation(
                             logger.error(f"Failed to generate/save edited image {base_name} with fidelity {fidelity}: {e}")
                             continue
                     
-                    if edited_images:  # Only add to dict if we have successful edits
+                    if edited_images:
                         edited_images_dict[base_name] = {
                             "original": original_image,
                             "edited": edited_images,
@@ -164,20 +151,18 @@ def log_validation(
                     logger.error(f"Failed to process validation image {image_file}: {e}")
                     continue
 
-        # Log to wandb if enabled
         try:
             for tracker in accelerator.trackers:
                 if tracker.name == "wandb":
                     wandb_table = wandb.Table(columns=WANDB_TABLE_COL_NAMES + ["Fidelity"])
                     for base_name, data in edited_images_dict.items():
                         for i, edited_image in enumerate(data["edited"]):
-                            # Use the corresponding fidelity level (1, 5, or 9)
                             fidelity = fidelity_levels[i % len(fidelity_levels)]
                             wandb_table.add_data(
                                 wandb.Image(data["original"]),
                                 wandb.Image(edited_image),
                                 data["prompt"],
-                                f"f{fidelity}"  # Add fidelity level to the table
+                                f"f{fidelity}"
                             )
                     tracker.log({"validation": wandb_table})
         except Exception as e:
@@ -495,27 +480,9 @@ def parse_args():
         "--enable_xformers_memory_efficient_attention", action="store_true", default=True, help="Whether or not to use xformers."
     )
     parser.add_argument(
-        "--text_encoder_lora_path",
-        type=str,
-        default=None,
-        help="Path to the LoRA text encoder model",
-    )
-    parser.add_argument(
-        "--text_encoder_learning_rate",
-        type=float,
-        default=1e-5,  # Usually 5-10x smaller than unet learning rate
-        help="Learning rate for text encoder fine-tuning"
-    )
-    parser.add_argument(
-        "--text_encoder_teacher_loss_weight",
-        type=float,
-        default=0.1,
-        help="Weight for teacher distillation loss"
-    )
-    parser.add_argument(
         "--fidelity_mlp_learning_rate",
         type=float,
-        default=1e-4,  # Slightly lower than main learning rate
+        default=1e-4,
         help="Learning rate for the fidelity MLP",
     )
     parser.add_argument(
@@ -621,17 +588,7 @@ def main():
         args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
     )
     
-    # # Load the teacher text encoder (frozen copy of original)
-    # teacher_text_encoder = CLIPTextModel.from_pretrained(
-    #     args.pretrained_model_name_or_path,
-    #     subfolder="text_encoder",
-    #     revision=args.revision,
-    #     variant=args.variant,
-    # )
-    # teacher_text_encoder.requires_grad_(False)  # Ensure it's frozen
-    # teacher_text_encoder.eval()
 
-    # Regular text encoder (trainable)
     text_encoder = CLIPTextModel.from_pretrained(
         args.pretrained_model_name_or_path,
         subfolder="text_encoder",
@@ -639,7 +596,6 @@ def main():
         variant=args.variant,
     )
     
-    # Enable gradient checkpointing for memory efficiency
     if args.gradient_checkpointing:
         text_encoder.gradient_checkpointing_enable()
 
@@ -670,11 +626,10 @@ def main():
 
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
-    # Freeze text encoder since we're using the pre-trained FP32 version
+    # Freeze text encoder
     text_encoder.requires_grad_(False)
     text_encoder.eval()  # Set to eval mode
 
-    # Create EMA for the unet.
     if args.use_ema:
         ema_unet = EMAModel(unet.parameters(), model_cls=UNet2DConditionModel, model_config=unet.config)
 
@@ -715,7 +670,6 @@ def main():
                         # Original save logic for other models
                         model.save_pretrained(os.path.join(output_dir, "unet"))
 
-                    # make sure to pop weight so that corresponding model is not saved again
                     if weights:
                         weights.pop()
 
@@ -779,7 +733,6 @@ def main():
     # Move fidelity_mlp to device
     fidelity_mlp.to(accelerator.device)
 
-    # Modify optimizer setup to include fidelity_mlp parameters
 
     if args.use_8bit_adam:
         try:
@@ -789,8 +742,9 @@ def main():
         optimizer_cls = bnb.optim.AdamW8bit
     else:
         optimizer_cls = torch.optim.AdamW
+        
+    # Optimizer set for unet and fidelity_mlp
 
-    # Include fidelity_mlp in parameters to optimize
     params_to_optimize = [
         {"params": unet.parameters(), "lr": args.learning_rate},
         {"params": fidelity_mlp.parameters(), "lr": args.fidelity_mlp_learning_rate if args.fidelity_mlp_learning_rate else args.learning_rate}
@@ -804,7 +758,7 @@ def main():
     )
     
     def load_image_dataset(source_dir):
-        # Get all image files
+        
         input_dir = os.path.join(source_dir, "input_image")
         image_files = [f for f in os.listdir(input_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
         
@@ -817,12 +771,10 @@ def main():
         for img_file in image_files:
             base_name = os.path.splitext(img_file)[0]
             
-            # Get full paths
             input_img_path = os.path.join(source_dir, "input_image", img_file)
             edited_img_path = os.path.join(source_dir, "edited_image", img_file)
             prompt_path = os.path.join(source_dir, "edit_prompt", f"{base_name}.txt")
             
-            # Read prompt
             with open(prompt_path, 'r', encoding='utf-8') as f:
                 edit_prompt = f.read().strip()
             
@@ -830,7 +782,6 @@ def main():
             dataset_dict["edited_image"].append(edited_img_path)
             dataset_dict["edit_prompt"].append(edit_prompt)
         
-        # Create dataset and cast image columns
         dataset = Dataset.from_dict(dataset_dict)
         dataset = dataset.cast_column("input_image", Image())
         dataset = dataset.cast_column("edited_image", Image())
@@ -839,7 +790,7 @@ def main():
 
 
     if args.dataset_name is not None:
-        # Downloading and loading a dataset from the hub.
+        
         dataset = load_dataset(
             args.dataset_name,
             args.dataset_config_name,
@@ -857,12 +808,9 @@ def main():
         # See more about loading custom images at
         # https://huggingface.co/docs/datasets/main/en/image_load#imagefolder
 
-    # Preprocessing the datasets.
-    # We need to tokenize inputs and targets.
     column_names = dataset["train"].column_names
-    print("-----------column_names---------", column_names)
+    print("---column_names---", column_names)
 
-    # 6. Get the column names for input/target.
     dataset_columns = DATASET_NAME_MAPPING.get(args.dataset_name, None)
     if args.original_image_column is None:
         original_image_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
@@ -889,15 +837,12 @@ def main():
                 f"--edited_image_column' value '{args.edited_image_column}' needs to be one of: {', '.join(column_names)}"
             )
 
-    # Preprocessing the datasets.
-    # We need to tokenize input captions and transform the images.
     def tokenize_captions(captions):
         inputs = tokenizer(
             captions, max_length=tokenizer.model_max_length, padding="max_length", truncation=True, return_tensors="pt"
         )
         return inputs.input_ids
 
-    # Preprocessing the datasets.
     train_transforms = transforms.Compose(
         [
             transforms.CenterCrop(args.resolution) if args.center_crop else transforms.RandomCrop(args.resolution),
@@ -915,28 +860,21 @@ def main():
         edited_images = np.concatenate(
             [convert_to_np(image, args.resolution) for image in examples[edited_image_column]]
         )
-        # We need to ensure that the original and the edited images undergo the same
-        # augmentation transforms.
         images = np.concatenate([original_images, edited_images])
         images = torch.tensor(images)
         images = 2 * (images / 255) - 1
         return train_transforms(images)
 
     def preprocess_train(examples):
-        # Preprocess images.
+        
         preprocessed_images = preprocess_images(examples)
-        # Since the original and edited images were concatenated before
-        # applying the transformations, we need to separate them and reshape
-        # them accordingly.
         original_images, edited_images = preprocessed_images.chunk(2)
         original_images = original_images.reshape(-1, 3, args.resolution, args.resolution)
         edited_images = edited_images.reshape(-1, 3, args.resolution, args.resolution)
 
-        # Collate the preprocessed images into the `examples`.
         examples["original_pixel_values"] = original_images
         examples["edited_pixel_values"] = edited_images
 
-        # Preprocess the captions.
         captions = list(examples[edit_prompt_column])
         examples["input_ids"] = tokenize_captions(captions)
         return examples
@@ -944,7 +882,6 @@ def main():
     with accelerator.main_process_first():
         if args.max_train_samples is not None:
             dataset["train"] = dataset["train"].shuffle(seed=args.seed).select(range(args.max_train_samples))
-        # Set the training transforms
         train_dataset = dataset["train"].with_transform(preprocess_train)
 
     def collate_fn(examples):
@@ -959,7 +896,7 @@ def main():
             "input_ids": input_ids,
         }
 
-    # DataLoaders creation:
+    # DataLoader:
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
         shuffle=True,
@@ -1003,11 +940,9 @@ def main():
     elif accelerator.mixed_precision == "bf16":
         weight_dtype = torch.bfloat16
 
-    # Move text_encode and vae to gpu and cast to weight_dtype
     text_encoder.to(accelerator.device, dtype=torch.float32)
     vae.to(accelerator.device, dtype=weight_dtype)
 
-    # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
@@ -1017,11 +952,8 @@ def main():
                 f"the expected length ({len_train_dataloader_after_sharding}) when the learning rate scheduler was created. "
                 f"This inconsistency may result in the learning rate scheduler not functioning properly."
             )
-    # Afterwards we recalculate our number of training epochs
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
-    # We need to initialize the trackers we use, and also store our configuration.
-    # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
         accelerator.init_trackers("instruct-pix2pix", config=vars(args))
 
@@ -1353,11 +1285,10 @@ def main():
             variant=args.variant,
             torch_dtype=weight_dtype,
         )
-        # Directly attach the unwrapped fidelity_mlp to the pipeline
+        # attach the unwrapped fidelity_mlp to the pipeline to log_validation correctly
         pipeline.fidelity_mlp = accelerator.unwrap_model(fidelity_mlp)
         pipeline.save_pretrained(args.output_dir)
         
-        # Save FidelityMLP separately
         accelerator.unwrap_model(fidelity_mlp).save_pretrained(
             os.path.join(args.output_dir, "fidelity_mlp")
         )
@@ -1386,9 +1317,8 @@ def main():
                 unwrapped_fidelity_mlp.save_pretrained(args.fidelity_mlp_path)
                 logger.info(f"Saved FidelityMLP to {args.fidelity_mlp_path}")
 
-    # Add this to your training loop to verify fidelity MLP behavior
+    # Too noisy to be helpful
     if global_step % args.validation_steps == 0:
-        # Test fidelity MLP with different values
         test_fidelities = [0.1, 0.5, 0.9]  # Low, medium, high
         with torch.no_grad():
             for f_val in test_fidelities:
@@ -1412,11 +1342,8 @@ def compute_fidelity_loss(pred_images, input_images, target_images, fidelity_val
     Returns:
         A loss tensor that encourages the model to respect fidelity values
     """
-    batch_size = pred_images.shape[0]
+    # batch_size = pred_images.shape[0]
     
-    # Calculate how much the prediction should match the input vs the target
-    # For high fidelity (close to 1), pred should be closer to input
-    # For low fidelity (close to 0), pred should be closer to target
     
     # Calculate structural similarity between pred and input
     pred_input_diff = torch.abs(pred_images - input_images).mean(dim=[1,2,3])
