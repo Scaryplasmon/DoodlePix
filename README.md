@@ -3,8 +3,10 @@
 
 [![DoodlePix](https://github.com/user-attachments/assets/b6a44dc0-6d01-4285-a5ad-9f6fedf91656)](https://github.com/user-attachments/assets/b6a44dc0-6d01-4285-a5ad-9f6fedf91656)
 
+-------
+
 <details>
-  <summary><strong>The Pipe</strong></summary>
+  <summary><strong>The PIPE</strong></summary>
   
   - **Base Model:** StableDiffusion 2.1  
   - **Inference:** fits in < 4GB  
@@ -13,54 +15,19 @@
   - **Pipeline:** InstructPix2Pix (+ custom fidelity input)
 </details>
 
-<details>
-  <summary><strong>The Data</strong></summary>
+-------
 
-  - **Data Size:** ~4.5k images (for now)  
-  - **Image Generation:** Dalle-3 and Flux-Redux  
-  - **Edge Extraction:** Canny, Fake Scribble, Scribble Xdog, HED soft edge  
-  - **Doodles** were hand-drawn and compose about 10% of the edges (for now)
+<details>
+  <summary><strong>The DATA</strong></summary>
+
+  - **Data Size:** ~4.5k images
+  - **Image Generation:** Dalle-3, FLUX-PRO 1.1 and Flux-Redux-DEV 
+  - **Edge Extraction:** Canny, Fake Scribble, Scribble Xdog, HED soft edge 
+  - **Doodles** were hand-drawn and compose about 10% of the edges
+
+    To have maximum control over the Dataset, a few  apps were built 
 </details>
 
-    
-<details>
-  <summary><strong>Why?</strong></summary>
-  
-  <p>
-    The objective is to train a model able to take drawings as inputs.
-  </p>
-  
-  <p>
-    While most models and controlnets were trained using canny or similar line extractors as inputs(which focus on the most prominent lines in an image),
-  drawings are made with intention. A few squiggly lines placed in the right place can deliver a much better idea of what's being represented in the image:
-  </p>
-  
-  <table style="width: 60%; table-layout: fixed;">
-    <tr>
-      <td style="text-align: center;">
-        <strong>Drawing</strong><br>
-        <img src="assets/alien/alienDrawing.png" alt="Drawing" style="width: 60%; max-width: 240px; height: auto; object-fit: contain;">
-      </td>
-      <td style="text-align: center;">
-        <strong>Canny</strong><br>
-        <img src="assets/alien/alienCanny.png" alt="Canny" style="width: 60%; max-width: 240px; height: auto; object-fit: contain;">
-      </td>
-    </tr>
-  </table>
-  
-  <p>
-    To address this, I train a *Fidelity embedding* that injects an explicit fidelity signal into the Unet, allowing it to modulate its denoising behavior accordingly.
-  </p>
-  
-  <p>
-    The FidelityMLP (ranging from 0 to 9; f0–f9) lets users decide how much the model should "correct" their drawing. 
- </p> 
- <p> 
-  Although the InstructPix2Pix pipeline supports an ImageGuidance factor to control adherence to the input image, it tends to follow the drawing too strictly at higher values while losing compositional nuances at lower values.
- </p> 
-  
-  
-</details>
 
 ## Fidelity Embedding in Action
 
@@ -126,6 +93,7 @@
   </tr>
 </table>
 
+-The model also accepts canny edges as input, while keeping fidelity injection relevant
 <table style="width:100%; table-layout: fixed;">
   <tr>
     <td colspan="5" style="text-align:center; font-weight:bold; font-size:0.9rem; padding-bottom:8px;">
@@ -236,7 +204,7 @@ The model shows great color understanding as a byproduct of the InstructPix2Pix 
   </tr>
 </table>
 
-The model generates acceptable results with as little as 4 steps.
+The model generates acceptable results with as few as 4 steps.
 
 <table style="width:100%; table-layout: fixed;">
   <tr>
@@ -334,18 +302,57 @@ The model generates acceptable results with as little as 4 steps.
     
 </details>
 
+<details>
+  <summary><strong>Reasoning</strong></summary>
+  
+  <p>
+    The objective is to train a model able to take drawings as inputs.
+  </p>
+  
+  <p>
+    While most models and controlnets were trained using canny or similar line extractors as inputs (which focus on the most prominent lines in an image),
+  drawings are made with intention. A few squiggly lines placed in the right place can sometimes deliver a much better idea of what's being represented in the image:
+  </p>
+  
+  <table style="width: 60%; table-layout: fixed;">
+    <tr>
+      <td style="text-align: center;">
+        <strong>Drawing</strong><br>
+        <img src="assets/alien/alienDrawing.png" alt="Drawing" style="width: 60%; max-width: 240px; height: auto; object-fit: contain;">
+      </td>
+      <td style="text-align: center;">
+        <strong>Canny</strong><br>
+        <img src="assets/alien/alienCanny.png" alt="Canny" style="width: 60%; max-width: 240px; height: auto; object-fit: contain;">
+      </td>
+    </tr>
+  </table>
+  
+  <p>
+    To address this, I train a *Fidelity embedding* that injects an explicit fidelity signal into the Unet, allowing it to modulate its denoising behavior accordingly.
+  </p>
+  
+  <p>
+    The FidelityMLP (ranging from 0 to 9; f0–f9) lets users decide how much the model should "correct" their drawing. 
+ </p> 
+ <p> 
+  Although the InstructPix2Pix pipeline supports an ImageGuidance factor to control adherence to the input image, it tends to follow the drawing too strictly at higher values while losing compositional nuances at lower values.
+ </p> 
+  
+  
+</details>
+
+
 # TODOs
 
 <details>
   <summary><strong>DATA</strong></summary>
   
-- [ ] Increase hand-drawn line inputs
+- [ ] Increase amount of hand-drawn line inputs
 - [ ] Smaller-Bigger subject variations
 - [ ] Background Variations
-- [ ] Increase Flat style representation
-- [ ] Improve colors matches in prompts
+- [ ] Increase Flat style references
+- [ ] Improve color matches in prompts
 - [ ] Clean up
-- [ ] Release Data opensource
 
 </details>
 
@@ -361,4 +368,15 @@ The model generates acceptable results with as little as 4 steps.
       
 </details>
 
+## Credits
 
+ - This is a custom implementation of the [Training](https://github.com/huggingface/diffusers/blob/main/examples/instruct_pix2pix/train_instruct_pix2pix.py) and [Pipeline](https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/stable_diffusion/pipeline_stable_diffusion_instruct_pix2pix.py) scripts from the [Diffusers repo](https://github.com/huggingface/diffusers)
+  
+ - Dataset was generated using Chat based DALLE-3, FLUX-1.1 PRO and [FLUX-REDUX-DEV](https://huggingface.co/black-forest-labs/FLUX.1-Redux-dev)
+   
+ - Edge extraction was made easy thanks to [Fannovel16's ComfyUI Controlnet Aux](https://github.com/Fannovel16/comfyui_controlnet_aux)
+
+ - [ComfyUI](https://www.comfy.org/) was a big part of the Data Development process
+ - Around 40% of the images were captioned using [Moondream2](https://huggingface.co/vikhyatk/moondream2)
+ - Dataset Handlers were built using [PyQT](https://doc.qt.io/qtforpython-6/index.html)
+ - Huge Thanks to the OpenSource community for hosting and sharing so much cool stuff online
