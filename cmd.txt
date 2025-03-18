@@ -34,6 +34,10 @@ accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretraine
 
 accelerate launch --mixed_precision="fp16" train_instruct_pix2pix.py --pretrained_model_name_or_path="stabilityai/stable-diffusion-2-1" --train_data_dir="data/DoodlePixV6" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=8 --gradient_checkpointing --max_train_steps=20000 --learning_rate=4e-05 --max_grad_norm=1 --conditioning_dropout_prob=0.02 --use_8bit_adam --enable_xformers_memory_efficient_attention --seed=43 --random_flip --output_dir="models/DoodlePixV6_21" --cache_dir="cache" --val_images_dir="data/DoodlePixV6/val/" --validation_steps=500 --checkpointing_steps=1000 --checkpoints_total_limit=3 --fidelity_mlp_learning_rate=1e-04 --resume_from_checkpoint="latest"
 
+---SD3---
+
+accelerate launch --mixed_precision="fp16" train.py --pretrained_model_name_or_path="stabilityai/stable-diffusion-3.5-medium" --train_data_dir="data/DoodlePixV6" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=8 --gradient_checkpointing --max_train_steps=20000 --learning_rate=1e-05 --max_grad_norm=1 --conditioning_dropout_prob=0.04 --use_8bit_adam --enable_xformers_memory_efficient_attention --seed=42 --random_flip --output_dir="models/DoodlePix35_V0" --cache_dir="cache" --val_images_dir="data/DoodlePixV6/val/" --validation_steps=10 --checkpointing_steps=1000 --checkpoints_total_limit=3 --fidelity_mlp_learning_rate=5e-05
+
 #20k is more than enough
 
 TXTEncoder_DoodlePixV2
