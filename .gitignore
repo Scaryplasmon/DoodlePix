@@ -18,6 +18,8 @@ __pycache__/
 /HFmodels/
 /DoodlesTests/
 /validation_results/
+/DoodleColab/
+/instruct-pix2pix-model/
 # C extensions
 *.so
 *.zip

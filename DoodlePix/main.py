@@ -597,6 +597,35 @@ class DoodlePixUI(QMainWindow):
         model_layout.setContentsMargins(0, -10, 0, 0)
         model_layout.addStretch()
         
+        # Add this to the setup_ui method after creating the lora_btn
+        lora_btn = QPushButton("🎚️")
+        lora_btn.setToolTip("Load LoRA weights")
+        lora_btn.clicked.connect(self.load_lora)
+        lora_btn.setStyleSheet(nav_button_style)
+        
+        # LoRA status indicator
+        self.lora_status = QLabel("")
+        self.lora_status.setStyleSheet("color: #4eff92; padding-left: 5px; font-size: 10px;")
+        
+        # Add to model_layout
+        model_layout.addWidget(lora_btn)
+        model_layout.addWidget(self.lora_status)
+        
+        # Add LoRA intensity controls
+        lora_intensity_layout = QHBoxLayout()
+        lora_intensity_layout.addWidget(QLabel("LoRA Intensity:"))
+        self.lora_intensity_slider = QSlider(Qt.Horizontal)
+        self.lora_intensity_slider.setRange(0, 200)  # 0.0 to 2.0 with 0.01 step
+        self.lora_intensity_slider.setValue(100)     # Default 1.0
+        self.lora_intensity_slider.setTickPosition(QSlider.TicksBelow)
+        self.lora_intensity_slider.setTickInterval(25)
+        self.lora_intensity_value = QLabel("1.00")
+        self.lora_intensity_slider.setEnabled(False)
+        self.lora_intensity_slider.valueChanged.connect(self.on_lora_intensity_changed)
+        lora_intensity_layout.addWidget(self.lora_intensity_slider)
+        lora_intensity_layout.addWidget(self.lora_intensity_value)
+        model_layout.addLayout(lora_intensity_layout)
+        
         left_layout.addWidget(model_widget)
         
         # Status bar
@@ -1142,6 +1171,68 @@ class DoodlePixUI(QMainWindow):
             # Reset counter when settings change
             self.save_counter = 0
 
+    @Slot()
+    def load_lora(self):
+        """Load LoRA weights on top of the base model"""
+        if not self.inference_handler.pipeline:
+            QMessageBox.warning(self, "Error", "Please load a base model first!")
+            return
+        
+        path = QFileDialog.getExistingDirectory(self, "Select LoRA Directory")
+        if path:
+            # Show loading indicator
+            self.status_label.setText("Loading LoRA weights...")
+            self.loading_indicator.start()
+            
+            # Get current intensity from slider
+            intensity = self.lora_intensity_slider.value() / 100.0
+            
+            # Load LoRA weights with current intensity
+            success, message = self.inference_handler.load_lora(path, intensity)
+            
+            # Hide loading indicator
+            self.loading_indicator.stop()
+            
+            if success:
+                self.status_label.setText("LoRA weights loaded successfully!")
+                self.lora_status.setText("✓ LoRA Active")
+                
+                # Enable intensity slider
+                self.lora_intensity_slider.setEnabled(True)
+                
+                # Extract and display LoRA name
+                lora_name = os.path.basename(path)
+                if lora_name:
+                    self.lora_status.setText(f"✓ LoRA: {lora_name}")
+            else:
+                self.status_label.setText("Failed to load LoRA weights")
+                self.lora_status.setText("")
+                QMessageBox.critical(self, "Error", message)
+
+    @Slot()
+    def unload_lora(self):
+        """Unload LoRA weights and return to base model"""
+        if not self.inference_handler.lora_path:
+            return
+        
+        # Show loading indicator
+        self.status_label.setText("Unloading LoRA weights...")
+        self.loading_indicator.start()
+        
+        # Unload LoRA
+        success = self.inference_handler.unload_lora()
+        
+        # Hide loading indicator
+        self.loading_indicator.stop()
+        
+        if success:
+            self.status_label.setText("LoRA weights unloaded")
+            self.lora_status.setText("")
+            # Disable intensity slider
+            self.lora_intensity_slider.setEnabled(False)
+        else:
+            self.status_label.setText("Failed to unload LoRA weights")
+
     def closeEvent(self, event):
         # Clean up any running threads before closing
         if hasattr(self, 'loader_thread') and self.loader_thread.isRunning():
@@ -1151,6 +1242,33 @@ class DoodlePixUI(QMainWindow):
         if self.canny_dialog:
             self.canny_dialog.close()
         super().closeEvent(event)
+
+    def show_lora_menu(self, pos):
+        """Show context menu for LoRA button"""
+        from PySide6.QtWidgets import QMenu
+        
+        menu = QMenu(self)
+        load_action = menu.addAction("Load LoRA")
+        unload_action = menu.addAction("Unload LoRA")
+        unload_action.setEnabled(self.inference_handler.lora_path is not None)
+        
+        action = menu.exec_(self.sender().mapToGlobal(pos))
+        if action == load_action:
+            self.load_lora()
+        elif action == unload_action:
+            self.unload_lora()
+
+    @Slot(int)
+    def on_lora_intensity_changed(self, value):
+        """Handle changes to LoRA intensity slider"""
+        intensity = value / 100.0  # Convert 0-200 to 0.0-2.0
+        self.lora_intensity_value.setText(f"{intensity:.2f}")
+        
+        # Update model immediately if slider released
+        if self.inference_handler.lora_path:
+            success, message = self.inference_handler.set_lora_intensity(intensity)
+            if not success:
+                self.status_label.setText(message)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

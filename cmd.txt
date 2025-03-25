@@ -40,7 +40,12 @@ accelerate launch --mixed_precision="fp16" train.py --pretrained_model_name_or_p
 
 ---SDXL---
 
-accelerate launch --mixed_precision="fp16" train.py --pretrained_model_name_or_path="stabilityai/stable-diffusion-xl-base-1.0" --train_data_dir="data/DoodlePixV6" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=8 --gradient_checkpointing --max_train_steps=20000 --learning_rate=1e-05 --max_grad_norm=1 --conditioning_dropout_prob=0.04 --use_8bit_adam --enable_xformers_memory_efficient_attention --seed=42 --random_flip --output_dir="models/DoodlePixXL_V0" --cache_dir="cache" --val_images_dir="data/DoodlePixV6/val/" --validation_steps=10 --checkpointing_steps=1000 --checkpoints_total_limit=3 --fidelity_mlp_learning_rate=5e-05
+accelerate launch --mixed_precision="fp16" train.py --pretrained_model_name_or_path="stabilityai/stable-diffusion-2-1" --train_data_dir="data/DoodlePixV6" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=8 --gradient_checkpointing --max_train_steps=20000 --learning_rate=1e-05 --max_grad_norm=1 --conditioning_dropout_prob=0.04 --use_8bit_adam --enable_xformers_memory_efficient_attention --seed=42 --random_flip --output_dir="models/DoodlePixXL_V0" --cache_dir="cache" --val_images_dir="data/DoodlePixV6/val/" --validation_steps=10 --checkpointing_steps=1000 --checkpoints_total_limit=3 --fidelity_mlp_learning_rate=5e-05
+
+
+---SDXL---
+
+accelerate launch --mixed_precision="fp16" train_instruct_pix2pix_lora_DIFFUSERS.py --pretrained_model_name_or_path="stabilityai/stable-diffusion-xl-base-1.0" --train_data_dir="data/DoodlePixV6" --resolution=512 --train_batch_size=1 --gradient_accumulation_steps=8 --gradient_checkpointing --max_train_steps=20000 --learning_rate=1e-05 --max_grad_norm=1 --conditioning_dropout_prob=0.04 --use_8bit_adam --enable_xformers_memory_efficient_attention --seed=42 --random_flip --output_dir="models/DoodlePixXL_V0" --cache_dir="cache" --val_images_dir="data/DoodlePixV6/val/" --validation_steps=10 --checkpointing_steps=1000 --checkpoints_total_limit=3 --fidelity_mlp_learning_rate=5e-05
 
 #20k is more than enough
 
@@ -51,7 +56,11 @@ accelerate launch train_instruct_pix2pixTxtEncoder.py --pretrained_model_name_or
 
 LORA training
 
-python train_DoodlePix_Lora.py --pretrained_model_name_or_path="models/DoodlePixV4_TXTGRAD" --train_data_dir="DoodlePixV4/lora_cute" --output_dir="models/doodlepix_style_lora" --num_train_epochs=10 --train_batch_size=1 --gradient_accumulation_steps=4 --learning_rate=2e-4 --text_encoder_learning_rate=5e-5 --lora_rank=4 --resolution=512 --validation_steps=10 --style_name="whimsy" --val_images_dir="DoodlePixV4/lora_cute/val/"
+python train_instruct_pix2pix_lora_DIFFUSERS.py --mixed_precision="fp16" --pretrained_model_name_or_path="HFmodels/DoodlePixV6.21" --train_data_dir="data/DontStarve" --resolution=512 --gradient_checkpointing --train_batch_size=4 --use_8bit_adam --conditioning_dropout_prob=0.04 --gradient_accumulation_steps=4 --learning_rate=1e-4 --output_dir="models/DontStarveLora" --enable_xformers_memory_efficient_attention --max_train_steps=4000 --checkpointing_steps=500 --rank=16 --seed=42 --validation_steps=500 --use_fidelity_control --style_strength=0.8 --val_images_dir="data/DoodlePixV6/val/"
+
+python train_instruct_pix2pix_lora_DIFFUSERS.py --mixed_precision="fp16" --pretrained_model_name_or_path="HFmodels/DoodlePixV6.21" --train_data_dir="data/DontStarve" --resolution=512 --gradient_checkpointing --train_batch_size=8 --use_8bit_adam --conditioning_dropout_prob=0.04 --gradient_accumulation_steps=2 --learning_rate=1e-4 --output_dir="models/DontStarveLora64" --enable_xformers_memory_efficient_attention --max_train_steps=5000 --checkpointing_steps=1000 --rank=64 --seed=42 --validation_steps=1000 --use_fidelity_control --style_strength=0.5 --val_images_dir="data/DoodlePixV6/val/"
+
+python train_instruct_pix2pix_lora_DIFFUSERS.py --mixed_precision="fp16" --pretrained_model_name_or_path="HFmodels/DoodlePixV6.21" --train_data_dir="data/Googh" --resolution=512 --gradient_checkpointing --train_batch_size=8 --use_8bit_adam --conditioning_dropout_prob=0.04 --gradient_accumulation_steps=2 --learning_rate=1e-4 --output_dir="models/Googh64" --enable_xformers_memory_efficient_attention --max_train_steps=6000 --checkpointing_steps=1000 --rank=64 --seed=42 --validation_steps=1000 --use_fidelity_control --style_strength=0.5 --val_images_dir="data/DoodlePixV6/val/"
 
 TXTEmbed
 python train_DoodlePix_embeddings.py --pretrained_model_name_or_path models/DoodlePixV4_TXTGRAD --train_data_dir "DoodlePixV4/emb_cute/edited_image" --output_dir "models/cute_style_model" --resolution 512 --num_train_steps 3000 --learning_rate 5e-5 --style_token "<cute-style>" --initializer_token "cute" --validate_every 100 --style_conditioning_scale 5.0 --style_scale 4.0 --style_token_repeats 5

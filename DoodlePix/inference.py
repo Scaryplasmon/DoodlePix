@@ -10,6 +10,8 @@ class InferenceHandler:
         self.device = None
         self.schedulers = None
         self._setup_done = False
+        self.base_model_path = None
+        self.lora_path = None
         
     def _lazy_setup(self):
         """Lazy load ML dependencies only when needed"""
@@ -34,21 +36,32 @@ class InferenceHandler:
     def get_scheduler_names(self):
         """Get list of available schedulers without loading ML stuff"""
         return ["Euler Ancestral"]
-        
+    
     def load_model(self, model_path, scheduler_name="Euler Ancestral"):
-        """Load the model from path"""
+        """Load the base model from path"""
         try:
             self._lazy_setup()
             
             scheduler_class = self.schedulers.get(scheduler_name)
             scheduler = scheduler_class.from_pretrained(model_path, subfolder="scheduler")
+            fidelity_mlp_path = os.path.join(model_path, "fidelity_mlp")
             
+            # Load the base pipeline
             self.pipeline = self._pipeline_class.from_pretrained(
                 model_path,
                 torch_dtype=self._torch.float16,
                 safety_checker=None,
                 scheduler=scheduler
             ).to(self.device)
+            
+            # Store base model path
+            self.base_model_path = model_path
+            
+            # Then load and attach the fidelity MLP if available
+            if os.path.exists(fidelity_mlp_path):
+                self.pipeline.fidelity_mlp = FidelityMLP.from_pretrained(fidelity_mlp_path)
+                self.pipeline.fidelity_mlp.to(device=self.device, dtype=self._torch.float16)
+                print(f"Loaded fidelity MLP from: {fidelity_mlp_path}")
             
             # Enable optimizations
             self.pipeline.enable_model_cpu_offload()
@@ -60,53 +73,80 @@ class InferenceHandler:
         except Exception as e:
             print(f"Error loading model: {e}")
             return False
+    
+    def load_lora(self, lora_path, intensity=1.0):
+        """
+        Load LoRA weights onto the current model with specified intensity
         
-    def load_model(self, model_path, scheduler_name="Euler Ancestral"):
-        """Load the model from path"""
+        Args:
+            lora_path: Path to LoRA weights
+            intensity: Float between 0.0-2.0 controlling strength of LoRA effect (default: 1.0)
+        """
+        if not self.pipeline:
+            return False, "Please load a base model first"
+            
         try:
-            self._lazy_setup()
-            
-            scheduler_class = self.schedulers.get(scheduler_name)
-            scheduler = scheduler_class.from_pretrained(model_path, subfolder="scheduler")
-            fidelity_mlp_path = model_path + "/fidelity_mlp"
-            
-            # Use from_pretrained_with_fidelity if fidelity_mlp_path is provided
+            # First unload any existing LoRA weights to avoid conflicts
             try:
-                # First load the pipeline normally
-                self.pipeline = self._pipeline_class.from_pretrained(
-                    model_path,
-                    torch_dtype=self._torch.float16,
-                    safety_checker=None,
-                    scheduler=scheduler
-                ).to(self.device)
-                
-                # Then load and attach the fidelity MLP
-                if os.path.exists(fidelity_mlp_path):
-                    self.pipeline.fidelity_mlp = FidelityMLP.from_pretrained(fidelity_mlp_path)
-                    self.pipeline.fidelity_mlp.to(device=self.device, dtype=self._torch.float16)
-                    print(f"Loaded fidelity MLP from: {fidelity_mlp_path}")
-                else:
-                    print(f"Fidelity MLP path not found: {fidelity_mlp_path}")
-                    return False
-            except Exception as e:
-                # Regular loading without fidelity MLP
-                print(f"Error loading model: {e}")
-                self.pipeline = self._pipeline_class.from_pretrained(
-                    model_path,
-                    torch_dtype=self._torch.float16,
-                    safety_checker=None,
-                    scheduler=scheduler
-                ).to(self.device)
+                self.pipeline.unload_lora_weights()
+            except:
+                pass  # Ignore errors if no LoRA weights loaded
             
-            # Enable optimizations
-            self.pipeline.enable_model_cpu_offload()
-            self.pipeline.enable_attention_slicing()
-            if hasattr(self.pipeline, "enable_xformers_memory_efficient_attention"):
-                self.pipeline.enable_xformers_memory_efficient_attention()
-                
+            # Load LoRA weights with cross_attention_kwargs to set scale immediately
+            self.pipeline.load_lora_weights(
+                lora_path,
+                cross_attention_kwargs={"scale": intensity}
+            )
+            
+            self.lora_path = lora_path
+            
+            # Check if there's a fidelity MLP in the LoRA folder  
+            fidelity_mlp_path = os.path.join(lora_path, "fidelity_mlp")
+            if os.path.exists(fidelity_mlp_path):
+                self.pipeline.fidelity_mlp = FidelityMLP.from_pretrained(fidelity_mlp_path)
+                self.pipeline.fidelity_mlp.to(device=self.device, dtype=self._torch.float16)
+                print(f"Loaded fidelity MLP from LoRA: {fidelity_mlp_path}")
+            
+            return True, f"LoRA weights loaded from {lora_path} with intensity {intensity}"
+        except Exception as e:
+            print(f"Error loading LoRA: {e}")
+            import traceback
+            traceback.print_exc()
+            return False, f"Error loading LoRA: {str(e)}"
+    
+    def set_lora_intensity(self, intensity):
+        """
+        Adjust the intensity/scale of loaded LoRA weights
+        
+        Args:
+            intensity: Float between 0.0-2.0 controlling strength of LoRA effect
+        
+        Returns:
+            bool: Success status
+        """
+        if not self.pipeline or not self.lora_path:
+            return False, "No LoRA weights loaded"
+            
+        try:
+            # Set the scale through the pipeline's cross_attention_kwargs
+            self.pipeline.cross_attention_kwargs = {"scale": intensity}
+            return True, f"LoRA intensity set to {intensity}"
+        except Exception as e:
+            print(f"Error setting LoRA intensity: {e}")
+            return False, f"Error setting LoRA intensity: {str(e)}"
+    
+    def unload_lora(self):
+        """Unload LoRA weights and return to base model"""
+        if not self.pipeline or not self.lora_path:
+            return False
+            
+        try:
+            # Use proper API to unload LoRA
+            self.pipeline.unload_lora_weights()
+            self.lora_path = None
             return True
         except Exception as e:
-            print(f"Error loading model: {e}")
+            print(f"Error unloading LoRA: {e}")
             return False
             
     def change_scheduler(self, scheduler_name):
@@ -143,6 +183,15 @@ class InferenceHandler:
             
         props.negative_prompt=props.negative_prompt + "NSFW, artifacts, blur, jpg, uncanny, deformed, glow, shadow."
             
+        # Right before the pipeline call, ensure LoRA weights are applied
+        # No need for the set_adapters call - we'll use cross_attention_kwargs instead
+        
+        # Instead, we'll specify cross_attention_kwargs in the pipeline call
+        cross_attention_kwargs = {"scale": 1.0}  # Default scale
+        if hasattr(self.pipeline, "cross_attention_kwargs") and self.pipeline.cross_attention_kwargs:
+            # Use existing scale if already set
+            cross_attention_kwargs = self.pipeline.cross_attention_kwargs
+        
         # Generate image
         with self._torch.no_grad():
             if callback:  # If streaming is enabled
@@ -178,7 +227,8 @@ class InferenceHandler:
                     image_guidance_scale=props.image_guidance_scale,
                     generator=self._torch.manual_seed(props.seed) if props.seed else None,
                     callback=callback_wrapper,
-                    callback_steps=1  # Process every step internally, but our wrapper will filter
+                    callback_steps=1,
+                    cross_attention_kwargs=cross_attention_kwargs
                 ).images[0]
             else:
                 # Standard generation without streaming
@@ -189,7 +239,8 @@ class InferenceHandler:
                     num_inference_steps=props.num_inference_steps,
                     guidance_scale=props.guidance_scale,
                     image_guidance_scale=props.image_guidance_scale,
-                    generator=self._torch.manual_seed(props.seed) if props.seed else None
+                    generator=self._torch.manual_seed(props.seed) if props.seed else None,
+                    cross_attention_kwargs=cross_attention_kwargs
                 ).images[0]
             
         return output
