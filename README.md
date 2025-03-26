@@ -160,6 +160,383 @@ More Examples
   </tr>
 </table>
 
+
+# LORAs
+
+Lora training is an efficient way to fine-tune DoodlePix for specific styles and ways of drawing.
+
+<table style="width:100%; height: 124px; table-layout: fixed;">
+  <tr>
+    <td colspan="6" style="text-align:center; font-weight:italic; font-size:0.9rem; padding-bottom:0px;">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      input<br>
+      <img src="assets/Googh/sunflower_DR.png" alt="Input" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      Googh<br>
+      <img src="assets/Googh/sunflower_0.png" alt="Googh" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      DontStarve<br>
+      <img src="assets/DontStarve/SunFlowers_4.png" alt="DontStarve" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      input<br>
+      <img src="assets/Googh/gift_DR.png" alt="Input" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      Googh<br>
+      <img src="assets/Googh/gift_3.png" alt="Googh" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      DontStarve<br>
+      <img src="assets/DontStarve/gift_20.png" alt="DontStarve" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+  </tr>
+</table>
+
+-----
+
+## Googh
+
+Loras retains Styles and Fidelity injection from DoodlePix 
+
+<table style="width:100%; height: 124px; table-layout: fixed;">
+  <tr>
+    <td colspan="5" style="text-align:center; font-weight:italic; font-size:0.9rem; padding-bottom:0px;">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      input<br>
+      <img src="assets/Googh/man_DR2.png" alt="Input" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      Normal<br>
+      <img src="assets/Googh/manNormal.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      3D<br>
+      <img src="assets/Googh/man3D.png" alt="3D" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      Outline<br>
+      <img src="assets/Googh/manOutline.png" alt="Outline" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      Flat<br>
+      <img src="assets/Googh/manFlat.png" alt="Flat" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    </tr>
+    <tr>
+    <td style="text-align:center;">
+      Low Fidelity<br>
+      <img src="assets/Googh/man_3.png" alt="Flat" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      High Fidelity<br>
+      <img src="assets/Googh/manFidelity7.png" alt="Flat" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+  </tr>
+</table>
+<table style="width:100%; height: 124px; table-layout: fixed;">
+  <tr>
+    <td colspan="5" style="text-align:center; font-weight:italic; font-size:0.9rem; padding-bottom:0px;">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      input<br>
+      <img src="assets/Googh/gift_DR.png" alt="Input" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      Normal<br>
+      <img src="assets/Googh/giftNormal.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      3D<br>
+      <img src="assets/Googh/gift3D.png" alt="3D" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      Outline<br>
+      <img src="assets/Googh/giftOutline.png" alt="Outline" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      Flat<br>
+      <img src="assets/Googh/giftFlat.png" alt="Flat" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+  </tr>
+</table>
+
+More Examples:
+
+<table style="width:100%; height: 140px; table-layout: fixed;">
+  <tr>
+    <td colspan="6" style="text-align:center; font-weight:italic; font-size:0.9rem; padding-bottom:0px;">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      <img src="assets/Googh/road_DR.png" alt="Input" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <img src="assets/Googh/road4.png" alt="Normal" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <img src="assets/Googh/road5.png" alt="3D" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <img src="assets/Googh/road7.png" alt="Outline" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <img src="assets/Googh/road6.png" alt="Flat" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <img src="assets/Googh/road3.png" alt="Flat" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+  </tr>
+</table>
+
+<table style="width:100%; height: 140px; table-layout: fixed;">
+  <tr>
+    <td colspan="6" style="text-align:center; font-weight:italic; font-size:0.9rem; padding-bottom:0px;">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      <img src="assets/Googh/flower_DR.png" alt="Input" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <img src="assets/Googh/flower1.png" alt="Normal" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <img src="assets/Googh/flower2.png" alt="3D" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <img src="assets/Googh/flower3.png" alt="Outline" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <img src="assets/Googh/flower4.png" alt="Flat" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <img src="assets/Googh/flower5.png" alt="Flat" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+  </tr>
+</table>
+
+-----
+
+## DontStarve
+
+<table style="width:100%; height: 124px; table-layout: fixed;">
+  <tr>
+    <td colspan="5" style="text-align:center; font-weight:italic; font-size:0.9rem; padding-bottom:0px;">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      Flower<br>
+      <img src="assets/DontStarve/flower_DR.png" alt="Input" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/flower (1).png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/flower (2).png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/flower (3).png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/flower (4).png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      Gift<br>
+      <img src="assets/DontStarve/gift_DR.png" alt="Input" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/gift_14.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/gift_15.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/gift_16.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/gift_17.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+  <tr>
+    <td style="text-align:center;">
+      Carrot<br>
+      <img src="assets/DontStarve/carrot_DR.png" alt="Input" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/carrot_0.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/carrot_1.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/carrot_4.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/carrot_6.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      Rope<br>
+      <img src="assets/DontStarve/rope_DR.png" alt="Input" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/rope_0.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/rope_3.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/rope_4.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/rope_5.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      Potato<br>
+      <img src="assets/DontStarve/potato_DR.png" alt="Input" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/potato_0.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/potato_1.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/potato_5.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/potato_6.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      Heart<br>
+      <img src="assets/heart.png" alt="Input" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/heart_1.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/heart_0.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/heart_2.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/heart_4.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      Axe<br>
+      <img src="assets/axe.png" alt="Input" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/axe_0.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/axe_2.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/axe_3.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/axe_5.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      Potion<br>
+      <img src="assets/potion.png" alt="Input" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/potion_0.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/potion_5.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/potion_8.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/potion_10.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      Torch<br>
+      <img src="assets/torch.png" alt="Input" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/torch_0.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/torch_1.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/torch_2.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <br>
+      <img src="assets/DontStarve/torch_3.png" alt="Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+  </tr>
+</table>
+
+
+
 The model shows great color understanding as a byproduct of the InstructPix2Pix architecture.
 
 <table style="width:100%; height: 124px; table-layout: fixed;">
