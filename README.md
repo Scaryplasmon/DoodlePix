@@ -275,27 +275,29 @@ More Examples:
 
 <table style="width:100%; height: 140px; table-layout: fixed;">
   <tr>
-    <td colspan="6" style="text-align:center; font-weight:italic; font-size:0.9rem; padding-bottom:0px;">
+    <td colspan="3" style="text-align:center; font-weight:italic; font-size:0.9rem; padding-bottom:0px;">
     </td>
   </tr>
   <tr>
     <td style="text-align:center;">
-      <img src="assets/Googh/road_DR.png" alt="Input" style="width:140px; height:140px; object-fit:contain;">
+      <img src="assets/Googh/road_DR.png" alt="Input" style="width:200px; height:200px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <img src="assets/Googh/road4.png" alt="Normal" style="width:140px; height:140px; object-fit:contain;">
+      <img src="assets/Googh/road4.png" alt="Normal" style="width:200px; height:200px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <img src="assets/Googh/road5.png" alt="3D" style="width:140px; height:140px; object-fit:contain;">
+      <img src="assets/Googh/road5.png" alt="3D" style="width:200px; height:200px; object-fit:contain;">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      <img src="assets/Googh/road7.png" alt="Outline" style="width:200px; height:200px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <img src="assets/Googh/road7.png" alt="Outline" style="width:140px; height:140px; object-fit:contain;">
+      <img src="assets/Googh/road6.png" alt="Flat" style="width:200px; height:200px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <img src="assets/Googh/road6.png" alt="Flat" style="width:140px; height:140px; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <img src="assets/Googh/road3.png" alt="Flat" style="width:140px; height:140px; object-fit:contain;">
+      <img src="assets/Googh/road3.png" alt="Flat" style="width:200px; height:200px; object-fit:contain;">
     </td>
   </tr>
 </table>
@@ -307,22 +309,24 @@ More Examples:
   </tr>
   <tr>
     <td style="text-align:center;">
-      <img src="assets/Googh/flower_DR.png" alt="Input" style="width:140px; height:140px; object-fit:contain;">
+      <img src="assets/Googh/flower_DR.png" alt="Input" style="width:200px; height:200px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <img src="assets/Googh/flower1.png" alt="Normal" style="width:140px; height:140px; object-fit:contain;">
+      <img src="assets/Googh/flower1.png" alt="Normal" style="width:200px; height:200px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <img src="assets/Googh/flower2.png" alt="3D" style="width:140px; height:140px; object-fit:contain;">
+      <img src="assets/Googh/flower2.png" alt="3D" style="width:200px; height:200px; object-fit:contain;">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      <img src="assets/Googh/flower3.png" alt="Outline" style="width:200px; height:200px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <img src="assets/Googh/flower3.png" alt="Outline" style="width:140px; height:140px; object-fit:contain;">
+      <img src="assets/Googh/flower4.png" alt="Flat" style="width:200px; height:200px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
-      <img src="assets/Googh/flower4.png" alt="Flat" style="width:140px; height:140px; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <img src="assets/Googh/flower5.png" alt="Flat" style="width:140px; height:140px; object-fit:contain;">
+      <img src="assets/Googh/flower5.png" alt="Flat" style="width:200px; height:200px; object-fit:contain;">
     </td>
   </tr>
 </table>
@@ -539,7 +543,7 @@ More Examples:
 
 The model shows great color understanding as a byproduct of the InstructPix2Pix architecture.
 
-<table style="width:100%; height: 124px; table-layout: fixed;">
+<table style="width:100%; height: 164px; table-layout: fixed;">
   <tr>
     <td colspan="8" style="text-align:center; font-weight:bold; font-size:0.9rem; padding-bottom:8px;">
       Prompt: f9, flower, stylized. *color, green, white
@@ -548,42 +552,44 @@ The model shows great color understanding as a byproduct of the InstructPix2Pix 
   <tr>
     <td style="text-align:center;">
       <strong>input</strong><br>
-      <img src="assets/flowerInput.png" alt="Flower Input" style="width:100px; height:100px; object-fit:contain;">
+      <img src="assets/flowerInput.png" alt="Flower Input" style="width:150px; height:150px object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>red</strong><br>
-      <img src="assets/flower2.png" alt="Flower red" style="width:100px; height:100px; object-fit:contain;">
+      <img src="assets/flower2.png" alt="Flower red" style="width:150px; height:150px object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>blue</strong><br>
-      <img src="assets/flower3.png" alt="Flower light blue" style="width:100px; height:100px; object-fit:contain;">
+      <img src="assets/flower3.png" alt="Flower light blue" style="width:150px; height:150px object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>purple</strong><br>
-      <img src="assets/flower4.png" alt="Flower purple" style="width:100px; height:100px; object-fit:contain;">
+      <img src="assets/flower4.png" alt="Flower purple" style="width:150px; height:150px object-fit:contain;">
     </td>
+  </tr>
+  <tr>
     <td style="text-align:center;">
       <strong>green</strong><br>
-      <img src="assets/flower1.png" alt="Flower green" style="width:100px; height:100px; object-fit:contain;">
+      <img src="assets/flower1.png" alt="Flower green" style="width:150px; height:150px object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>cyan</strong><br>
-      <img src="assets/flower6.png" alt="Flower cyan" style="width:100px; height:100px; object-fit:contain;">
+      <img src="assets/flower6.png" alt="Flower cyan" style="width:150px; height:150px object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>yellow</strong><br>
-      <img src="assets/flower7.png" alt="Flower light green" style="width:100px; height:100px; object-fit:contain;">
+      <img src="assets/flower7.png" alt="Flower light green" style="width:150px; height:150px object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>orange</strong><br>
-      <img src="assets/flower8.png" alt="Flower orange" style="width:100px; height:100px; object-fit:contain;">
+      <img src="assets/flower8.png" alt="Flower orange" style="width:150px; height:150px object-fit:contain;">
     </td>
   </tr>
 </table>
 
 The model generates acceptable results with as few as 4 steps.
 
-<table style="width:100%; table-layout: fixed;">
+<table style="width:100%; height: 164px; table-layout: fixed;">
   <tr>
     <td colspan="8" style="text-align:center; font-weight:bold; font-size:0.9rem; padding-bottom:8px;">
       Prompt: f4, alien, red skin, white shirt, white background.
@@ -592,40 +598,42 @@ The model generates acceptable results with as few as 4 steps.
   <tr>
     <td style="text-align:center;">
       <strong>Drawing</strong><br>
-      <img src="assets/alien/alienDrawing.png" alt="Alien Drawing" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <img src="assets/alien/alienDrawing.png" alt="Alien Drawing" style="width:150px; height:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>4 </strong><br>
-      <img src="assets/alien/AlienD_4steps.png" alt="Alien 4" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <img src="assets/alien/AlienD_4steps.png" alt="Alien 4" style="width:150px; height:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>8 </strong><br>
-      <img src="assets/alien/AlienD_8steps.png" alt="Alien 8" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <img src="assets/alien/AlienD_8steps.png" alt="Alien 8" style="width:150px; height:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>14</strong><br>
-      <img src="assets/alien/AlienD_14steps.png" alt="Alien 14" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <img src="assets/alien/AlienD_14steps.png" alt="Alien 14" style="width:150px; height:150px; height:auto; object-fit:contain;">
     </td>
+  </tr>
+  <tr>
     <td style="text-align:center;">
       <strong>20</strong><br>
-      <img src="assets/alien/AlienD_20steps.png" alt="Alien 20" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <img src="assets/alien/AlienD_20steps.png" alt="Alien 20" style="width:150px; height:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>32</strong><br>
-      <img src="assets/alien/AlienD_32steps.png" alt="Alien 32" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <img src="assets/alien/AlienD_32steps.png" alt="Alien 32" style="width:150px; height:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>44</strong><br>
-      <img src="assets/alien/AlienD_44steps.png" alt="Alien 44" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <img src="assets/alien/AlienD_44steps.png" alt="Alien 44" style="width:150px; height:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>60</strong><br>
-      <img src="assets/alien/AlienD_60steps.png" alt="Alien 60" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <img src="assets/alien/AlienD_60steps.png" alt="Alien 60" style="width:150px; height:150px; height:auto; object-fit:contain;">
     </td>
   </tr>
 </table>
 
-<table style="width:100%; table-layout: fixed;">
+<table style="width:100%; height: 164px; table-layout: fixed;">
   <tr>
     <td colspan="8" style="text-align:center; font-weight:bold; font-size:0.9rem; padding-bottom:8px;">
       Prompt: f4, alien, red skin, white shirt, white background.
@@ -634,35 +642,37 @@ The model generates acceptable results with as few as 4 steps.
   <tr>
     <td style="text-align:center;">
       <strong>Canny</strong><br>
-      <img src="assets/alien/alienCanny.png" alt="Alien Canny" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <img src="assets/alien/alienCanny.png" alt="Alien Canny" style="width:150px; height:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>4 </strong><br>
-      <img src="assets/alien/AlienC_4steps.png" alt="Alien Canny 4" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <img src="assets/alien/AlienC_4steps.png" alt="Alien Canny 4" style="width:150px; height:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>8 </strong><br>
-      <img src="assets/alien/AlienC_8steps.png" alt="Alien Canny 8" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <img src="assets/alien/AlienC_8steps.png" alt="Alien Canny 8" style="width:150px; height:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>14</strong><br>
-      <img src="assets/alien/AlienC_14steps.png" alt="Alien Canny 14" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <img src="assets/alien/AlienC_14steps.png" alt="Alien Canny 14" style="width:150px; height:150px; height:auto; object-fit:contain;">
     </td>
+  </tr>
+  <tr>
     <td style="text-align:center;">
       <strong>20</strong><br>
-      <img src="assets/alien/AlienC_20steps.png" alt="Alien Canny 20" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <img src="assets/alien/AlienC_20steps.png" alt="Alien Canny 20" style="width:150px; height:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>32</strong><br>
-      <img src="assets/alien/AlienC_32steps.png" alt="Alien Canny 32" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <img src="assets/alien/AlienC_32steps.png" alt="Alien Canny 32" style="width:150px; height:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>44</strong><br>
-      <img src="assets/alien/AlienC_44steps.png" alt="Alien Canny 44" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <img src="assets/alien/AlienC_44steps.png" alt="Alien Canny 44" style="width:150px; height:150px; height:auto; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       <strong>60</strong><br>
-      <img src="assets/alien/AlienC_60steps.png" alt="Alien Canny 60" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+      <img src="assets/alien/AlienC_60steps.png" alt="Alien Canny 60" style="width:150px; height:150px; height:auto; object-fit:contain;">
     </td>
   </tr>
 </table>
