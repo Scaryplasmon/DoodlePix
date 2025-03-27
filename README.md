@@ -36,36 +36,6 @@
 <table style="width:100%; table-layout: fixed;">
   <tr>
     <td colspan="5" style="text-align:center; font-weight:bold; font-size:0.9rem; padding-bottom:8px;">
-      Prompt: f*, axe, metal, wooden handle. grey, brown wood
-    </td>
-  </tr>
-  <tr>
-    <td style="text-align:center;">
-      <strong>Image</strong><br>
-      <img src="assets/axe.png" alt="Axe Image" style="width:150px; height:150px; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>Normal</strong><br>
-      <img src="assets/AxeNormal.gif" alt="Axe Normal" style="width:150px; height:150px; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>3D</strong><br>
-      <img src="assets/Axe3D.gif" alt="Axe 3D" style="width:150px; height:150px; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>Outline</strong><br>
-      <img src="assets/AxeOutline.gif" alt="Axe Outline" style="width:150px; height:150px; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>Flat</strong><br>
-      <img src="assets/AxeFlat.gif" alt="Axe Flat" style="width:150px; height:150px; object-fit:contain;">
-    </td>
-  </tr>
-</table>
-
-<table style="width:100%; table-layout: fixed;">
-  <tr>
-    <td colspan="5" style="text-align:center; font-weight:bold; font-size:0.9rem; padding-bottom:8px;">
       Prompt: f*, red heart, white background.
     </td>
   </tr>
@@ -159,7 +129,35 @@ More Examples
     </td>
   </tr>
 </table>
-
+<table style="width:100%; height: 164px; table-layout: fixed;">
+  <tr>
+    <td colspan="5" style="text-align:center; font-weight:bold; font-size:0.9rem; padding-bottom:8px;">
+      Prompt: f*, axe, metal, wooden handle. grey, brown wood
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      <strong>Image</strong><br>
+      <img src="assets/axe.png" alt="Axe Image" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <strong>Normal</strong><br>
+      <img src="assets/AxeNormal.gif" alt="Axe Normal" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <strong>3D</strong><br>
+      <img src="assets/Axe3D.gif" alt="Axe 3D" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <strong>Outline</strong><br>
+      <img src="assets/AxeOutline.gif" alt="Axe Outline" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      <strong>Flat</strong><br>
+      <img src="assets/AxeFlat.gif" alt="Axe Flat" style="width:150px; height:150px; object-fit:contain;">
+    </td>
+  </tr>
+</table>
 
 # LORAs
 
@@ -167,33 +165,35 @@ Lora training is an efficient way to fine-tune DoodlePix for specific styles and
 
 <table style="width:100%; height: 124px; table-layout: fixed;">
   <tr>
-    <td colspan="6" style="text-align:center; font-weight:italic; font-size:0.9rem; padding-bottom:0px;">
+    <td colspan="3" style="text-align:center; font-weight:italic; font-size:0.9rem; padding-bottom:0px;">
     </td>
   </tr>
   <tr>
     <td style="text-align:center;">
       input<br>
-      <img src="assets/Googh/sunflower_DR.png" alt="Input" style="width:140px; height:140px; object-fit:contain;">
+      <img src="assets/Googh/sunflower_DR.png" alt="Input" style="width:200px; height:200px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       Googh<br>
-      <img src="assets/Googh/sunflower_0.png" alt="Googh" style="width:140px; height:140px; object-fit:contain;">
+      <img src="assets/Googh/sunflower_0.png" alt="Googh" style="width:200px; height:200px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       DontStarve<br>
-      <img src="assets/DontStarve/SunFlowers_4.png" alt="DontStarve" style="width:140px; height:140px; object-fit:contain;">
+      <img src="assets/DontStarve/SunFlowers_4.png" alt="DontStarve" style="width:200px; height:200px; object-fit:contain;">
     </td>
+  </tr>
+  <tr>
     <td style="text-align:center;">
       input<br>
-      <img src="assets/Googh/gift_DR.png" alt="Input" style="width:140px; height:140px; object-fit:contain;">
+      <img src="assets/Googh/gift_DR.png" alt="Input" style="width:200px; height:200px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       Googh<br>
-      <img src="assets/Googh/gift_3.png" alt="Googh" style="width:140px; height:140px; object-fit:contain;">
+      <img src="assets/Googh/gift_3.png" alt="Googh" style="width:200px; height:200px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       DontStarve<br>
-      <img src="assets/DontStarve/gift_20.png" alt="DontStarve" style="width:140px; height:140px; object-fit:contain;">
+      <img src="assets/DontStarve/gift_20.png" alt="DontStarve" style="width:200px; height:200px; object-fit:contain;">
     </td>
   </tr>
 </table>
