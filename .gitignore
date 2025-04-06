@@ -234,3 +234,8 @@ other_trainings/sentisDocs/packages_com.unity.sentis_2.1_manual_use-model-output
 other_trainings/sentisDocs/packages_com.unity.sentis_2.1_manual_use-tensors.md
 other_trainings/sentisDocs/packages_com.unity.sentis_2.1_manual_workflow-example.md
 other_trainings/trainingonGpus.pdf
+vae/fp16/
+TODO
+hypothesis.txt
+exfidelity_mlp.py
+BADtrain_instruct_pix2pix_sdxl_fidelity.py
