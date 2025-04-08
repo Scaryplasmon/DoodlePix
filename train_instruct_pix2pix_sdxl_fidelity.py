@@ -721,6 +721,56 @@ def compute_fidelity_loss(pred_images, input_images, target_images, fidelity_val
     
     return loss.mean()
 
+def save_base_model_structure(output_dir, tokenizers, text_encoders, vae, scheduler, pipeline_class_name="StableDiffusionXLInstructPix2PixPipeline"):
+    """
+    Saves the base structure (tokenizers, text encoders, VAE, scheduler, configs)
+    of an InstructPix2Pix XL model to a specified directory, excluding UNet and Fidelity MLP.
+    """
+    base_structure_dir = os.path.join(output_dir, "base_model_structure")
+    logger.info(f"Saving base model structure (excluding UNet/MLP) to: {base_structure_dir}")
+    os.makedirs(base_structure_dir, exist_ok=True)
+
+    components = {
+        "tokenizer": tokenizers[0],
+        "tokenizer_2": tokenizers[1],
+        "text_encoder": text_encoders[0],
+        "text_encoder_2": text_encoders[1],
+        "vae": vae,
+        "scheduler": scheduler,
+    }
+
+    model_index = {
+        "_class_name": pipeline_class_name,
+        "_diffusers_version": diffusers.__version__,
+    }
+
+    for name, component in components.items():
+        try:
+            save_path = os.path.join(base_structure_dir, name)
+            component.save_pretrained(save_path)
+            logger.info(f"Saved {name} to {save_path}")
+
+            # Add component info to model_index.json
+            # Determine library (diffusers or transformers)
+            library_name = "diffusers" if "diffusers" in component.__class__.__module__ else "transformers"
+            model_index[name] = [library_name, component.__class__.__name__]
+
+        except Exception as e:
+            logger.error(f"Failed to save component '{name}': {e}")
+            # Decide if you want to raise error or just log and continue
+            # raise e # Uncomment to stop if any component fails saving
+
+    # Write model_index.json (excluding unet and fidelity_mlp)
+    try:
+        model_index_path = os.path.join(base_structure_dir, "model_index.json")
+        with open(model_index_path, "w", encoding="utf-8") as f:
+            json.dump(model_index, f, indent=2)
+        logger.info(f"Saved model_index.json to {model_index_path}")
+    except Exception as e:
+        logger.error(f"Failed to save model_index.json: {e}")
+
+    logger.info("Base model structure saving complete.")
+
 def main():
     args = parse_args()
 
@@ -1362,6 +1412,17 @@ def main():
 
     # Set UNet to trainable.
     unet.train()
+    
+    if accelerator.is_main_process:
+        save_base_model_structure(
+            output_dir=args.output_dir,
+            tokenizers=[tokenizer_1, tokenizer_2],
+            text_encoders=[text_encoder_1, text_encoder_2],
+            vae=vae,
+            scheduler=noise_scheduler,
+            # Optional: pass the actual pipeline class if needed, otherwise default works
+            # pipeline_class_name=StableDiffusionXLInstructPix2PixPipeline.__name__
+        )
 
     # Adapted from pipelines.StableDiffusionXLPipeline.encode_prompt
     def encode_prompt(text_encoders, tokenizers, prompt):

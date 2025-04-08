@@ -1,13 +1,14 @@
+# fidelity_mlp.py
 import torch
 import torch.nn as nn
 import os
 
 class FidelityMLP(nn.Module):
-    def __init__(self, hidden_size):
+    def __init__(self, hidden_size, output_size=None):
         super().__init__()
         self.hidden_size = hidden_size
+        self.output_size = output_size or hidden_size
         
-        # More expressive architecture with residual connections
         self.net = nn.Sequential(
             nn.Linear(1, 128),
             nn.LayerNorm(128),
@@ -20,10 +21,8 @@ class FidelityMLP(nn.Module):
             nn.Tanh(),  # Bound outputs between -1 and 1
         )
         
-        # Output projection with special initialization
-        self.output_proj = nn.Linear(hidden_size, hidden_size)
+        self.output_proj = nn.Linear(hidden_size, self.output_size)
         
-        # Initialize with small weights
         self.apply(self._init_weights)
         
     def _init_weights(self, module):
@@ -33,26 +32,64 @@ class FidelityMLP(nn.Module):
             if module.bias is not None:
                 module.bias.data.zero_()
                 
-    def forward(self, x):
+    def forward(self, x, target_dim=None):
+        """
+        Forward pass with optional target dimension adjustment
+        
+        Args:
+            x: Input tensor with shape [batch_size, 1]
+            target_dim: If provided, will project to this dimension instead
+        """
         # Process through main network
         features = self.net(x)
         
         # Project to embedding space
-        # No scaling here - we'll let the model learn the appropriate scale
-        return self.output_proj(features)
+        outputs = self.output_proj(features)
+        
+        # If target dimension is provided and different than output_size,
+        # we need to adjust the dimensionality on the fly
+        if target_dim is not None and target_dim != self.output_size:
+            return self._adjust_dimension(outputs, target_dim)
+            
+        return outputs
+    
+    def _adjust_dimension(self, embeddings, target_dim):
+        """
+        Adjusts embedding dimension to match target_dim
+        
+        This allows the model to handle any embedding size on the fly
+        """
+        current_dim = embeddings.shape[-1]
+        
+        # If target is larger, pad with zeros
+        if target_dim > current_dim:
+            pad_size = target_dim - current_dim
+            # Create padding for last dimension only
+            padding = torch.zeros(
+                (*embeddings.shape[:-1], pad_size),
+                device=embeddings.device, 
+                dtype=embeddings.dtype
+            )
+            return torch.cat([embeddings, padding], dim=-1)
+            
+        # If target is smaller, truncate
+        elif target_dim < current_dim:
+            return embeddings[..., :target_dim]
+            
+        # If same size, return as is
+        return embeddings
     
     def save_pretrained(self, save_directory):
         """Save the model to a directory"""
         os.makedirs(save_directory, exist_ok=True)
         
-        # Save the model config
         config = {
-            "hidden_size": self.hidden_size
+            "hidden_size": self.hidden_size,
+            "output_size": self.output_size
         }
         config_file = os.path.join(save_directory, "config.json")
         torch.save(config, config_file)
         
-        # Save the model weights
         model_file = os.path.join(save_directory, "pytorch_model.bin")
         torch.save(self.state_dict(), model_file)
     
@@ -62,12 +99,12 @@ class FidelityMLP(nn.Module):
         config_file = os.path.join(pretrained_model_path, "config.json")
         model_file = os.path.join(pretrained_model_path, "pytorch_model.bin")
         
-        # Load config
         config = torch.load(config_file)
         
-        # Create model instance
-        model = cls(hidden_size=config["hidden_size"])
+        model = cls(
+            hidden_size=config["hidden_size"],
+            output_size=config.get("output_size", config["hidden_size"])
+        )
         
-        # Load weights
         model.load_state_dict(torch.load(model_file))
         return model

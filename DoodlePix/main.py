@@ -18,18 +18,21 @@ import io
 from draw import DrawingHandler
 from inference import InferenceHandler
 
-# Add a model loading thread to prevent UI freezing
 class ModelLoaderThread(QThread):
     finished = Signal(bool)
     
-    def __init__(self, inference_handler, model_path, scheduler_name):
+    def __init__(self, inference_handler, model_path, scheduler_name, is_sdxl=False):
         super().__init__()
         self.inference_handler = inference_handler
         self.model_path = model_path
         self.scheduler_name = scheduler_name
-        
+        self.is_sdxl = is_sdxl
     def run(self):
-        success = self.inference_handler.load_model(self.model_path, self.scheduler_name)
+        success = self.inference_handler.load_model(
+            self.model_path, 
+            self.scheduler_name, 
+            is_sdxl=self.is_sdxl
+        ) 
         self.finished.emit(success)
 
 # Add image generation thread with streaming support
@@ -460,7 +463,6 @@ class DoodlePixUI(QMainWindow):
         self.generated_images = []
         self.current_image_index = -1
         
-        # Initialize status and progress BEFORE setup_ui
         self.status_label = QLabel()
         self.progress_bar = QProgressBar()
         self.progress_bar.hide()
@@ -586,6 +588,11 @@ class DoodlePixUI(QMainWindow):
         browse_btn.clicked.connect(self.browse_model)
         browse_btn.setStyleSheet(nav_button_style)
         
+        self.is_sdxl_checkbox = QCheckBox("SDXL")
+        self.is_sdxl_checkbox.setToolTip("Check if loading an SDXL model")
+        self.is_sdxl_checkbox.setStyleSheet("QCheckBox { font-size: 12px; margin-left: 5px; }")
+
+        
         self.reload_cb = QCheckBox("Reload")
         self.reload_cb.setToolTip("Reload Model")
         self.reload_cb.setStyleSheet("QCheckBox { font-size: 16px; }")
@@ -594,6 +601,7 @@ class DoodlePixUI(QMainWindow):
         model_layout.addWidget(browse_btn)
         model_layout.addWidget(self.loading_indicator)
         model_layout.addWidget(self.reload_cb)
+        model_layout.addWidget(self.is_sdxl_checkbox)
         model_layout.setContentsMargins(0, -10, 0, 0)
         model_layout.addStretch()
         
@@ -909,11 +917,16 @@ class DoodlePixUI(QMainWindow):
             self.status_label.setText("Loading model...")
             self.loading_indicator.start()
             
+            # --- GET SDXL Checkbox state ---
+            load_as_sdxl = self.is_sdxl_checkbox.isChecked()
+            # --- END GET ---
+
             # Create and start the loader thread
             self.loader_thread = ModelLoaderThread(
-                self.inference_handler, 
-                path, 
-                "Euler Ancestral"
+                self.inference_handler,
+                path,
+                "Euler Ancestral", # Assuming Euler Ancestral works for both for now
+                is_sdxl=load_as_sdxl # <- PASS the checkbox state
             )
             self.loader_thread.finished.connect(self.on_model_loaded)
             self.loader_thread.start()

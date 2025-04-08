@@ -45,7 +45,7 @@ accelerate launch --mixed_precision="fp16" train.py --pretrained_model_name_or_p
 
 ---SDXL---
 
-accelerate launch --mixed_precision="fp16" train_instruct_pix2pix_sdxl.py --pretrained_model_name_or_path="stabilityai/stable-diffusion-xl-base-1.0" --pretrained_vae_model_name_or_path="vae/fp16" --train_data_dir="data/Googh_lmdb" --resolution=64 --train_batch_size=1 --gradient_accumulation_steps=1 --gradient_checkpointing --max_train_steps=20000 --learning_rate=1e-05 --max_grad_norm=1 --conditioning_dropout_prob=0.04 --use_8bit_adam --enable_xformers_memory_efficient_attention --seed=42 --random_flip --output_dir="models/DoodlePixXL_V2" --cache_dir="cache" --val_images_dir="data/DoodlePixV6/val/" --validation_steps=10 --checkpointing_steps=1000 --checkpoints_total_limit=3 --fidelity_mlp_learning_rate=5e-05 --use_fidelity_loss --fidelity_loss_freq="10"
+accelerate launch --mixed_precision="fp16" train_instruct_pix2pix_sdxl_fidelity.py --pretrained_model_name_or_path="stabilityai/stable-diffusion-xl-base-1.0" --pretrained_vae_model_name_or_path="vae/fp16" --train_data_dir="data/Googh_lmdb" --resolution=64 --train_batch_size=1 --gradient_accumulation_steps=1 --gradient_checkpointing --max_train_steps=20000 --learning_rate=1e-05 --max_grad_norm=1 --conditioning_dropout_prob=0.04 --use_8bit_adam --enable_xformers_memory_efficient_attention --seed=42 --random_flip --output_dir="models/DoodlePixXL_V2" --cache_dir="cache" --val_images_dir="data/DoodlePixV6/val/" --validation_steps=10 --checkpointing_steps=1000 --checkpoints_total_limit=3 --fidelity_mlp_learning_rate=5e-05 --use_fidelity_loss --fidelity_loss_freq="10"
 
 #20k is more than enough
 

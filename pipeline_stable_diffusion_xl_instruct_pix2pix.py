@@ -438,18 +438,26 @@ class StableDiffusionXLInstructPix2PixPipeline(
                 prompt_embeds_list.append(prompt_embeds)
             # ----- START FIDELITY EMBEDDING INJECTION -----
             if self.fidelity_mlp is not None:
-                # Ensure fidelity tensor has correct dtype
-                fidelity_tensor = fidelity_tensor.to(dtype=self.fidelity_mlp.net[0].weight.dtype, device=device)
+                # 1. Determine target device and dtype from the MLP itself
+                mlp_device = next(self.fidelity_mlp.parameters()).device
+                mlp_dtype = next(self.fidelity_mlp.parameters()).dtype # More reliable than checking specific layer
 
-                # Inject into first text encoder embeds
+                # 2. Ensure fidelity_tensor is on the MLP's device and dtype
+                fidelity_tensor_ready = fidelity_tensor.to(device=mlp_device, dtype=mlp_dtype)
+
+                # 3. Inject into first text encoder embeds
                 hidden_size_1 = prompt_embeds_list[0].shape[-1]
-                fidelity_embedding_1 = self.fidelity_mlp(fidelity_tensor, target_dim=hidden_size_1)
-                prompt_embeds_list[0][:, 0] = prompt_embeds_list[0][:, 0] + 0.2 * fidelity_embedding_1
+                fidelity_embedding_1 = self.fidelity_mlp(fidelity_tensor_ready, target_dim=hidden_size_1)
+                # Ensure addition happens on the correct device
+                target_embed_1 = prompt_embeds_list[0][:, 0].to(fidelity_embedding_1.device)
+                prompt_embeds_list[0][:, 0] = target_embed_1 + 0.2 * fidelity_embedding_1
 
-                # Inject into second text encoder embeds
+                # 4. Inject into second text encoder embeds
                 hidden_size_2 = prompt_embeds_list[1].shape[-1]
-                fidelity_embedding_2 = self.fidelity_mlp(fidelity_tensor, target_dim=hidden_size_2)
-                prompt_embeds_list[1][:, 0] = prompt_embeds_list[1][:, 0] + 0.2 * fidelity_embedding_2
+                fidelity_embedding_2 = self.fidelity_mlp(fidelity_tensor_ready, target_dim=hidden_size_2)
+                # Ensure addition happens on the correct device
+                target_embed_2 = prompt_embeds_list[1][:, 0].to(fidelity_embedding_2.device)
+                prompt_embeds_list[1][:, 0] = target_embed_2 + 0.2 * fidelity_embedding_2
             # ----- END FIDELITY EMBEDDING INJECTION -----
 
             prompt_embeds = torch.concat(prompt_embeds_list, dim=-1)
@@ -507,18 +515,43 @@ class StableDiffusionXLInstructPix2PixPipeline(
                 
             # ----- START FIDELITY EMBEDDING INJECTION (Negative) -----
             if self.fidelity_mlp is not None:
-                # Inject into first negative text encoder embeds
-                hidden_size_1 = negative_prompt_embeds_list[0].shape[-1]
-                if 'fidelity_embedding_1' not in locals():
-                    fidelity_embedding_1 = self.fidelity_mlp(fidelity_tensor.to(dtype=self.fidelity_mlp.net[0].weight.dtype, device=device), target_dim=hidden_size_1)
-                negative_prompt_embeds_list[0][:, 0] = negative_prompt_embeds_list[0][:, 0] + 0.2 * fidelity_embedding_1
+                # Ensure fidelity_tensor exists from positive prompt section
+                if 'fidelity_tensor' not in locals():
+                    logger.error("INTERNAL ERROR: fidelity_tensor missing during negative prompt processing!")
+                    # Skip injection if tensor is missing
+                else:
+                    # 1. Determine target device and dtype from the MLP itself
+                    mlp_device = next(self.fidelity_mlp.parameters()).device
+                    mlp_dtype = next(self.fidelity_mlp.parameters()).dtype
 
-                hidden_size_2 = negative_prompt_embeds_list[1].shape[-1]
-                if 'fidelity_embedding_2' not in locals():
-                    fidelity_embedding_2 = self.fidelity_mlp(fidelity_tensor.to(dtype=self.fidelity_mlp.net[0].weight.dtype, device=device), target_dim=hidden_size_2)
-                negative_prompt_embeds_list[1][:, 0] = negative_prompt_embeds_list[1][:, 0] + 0.2 * fidelity_embedding_2
+                    # 2. Ensure fidelity_tensor is on the MLP's device and dtype
+                    fidelity_tensor_ready = fidelity_tensor.to(device=mlp_device, dtype=mlp_dtype)
+
+                    # 3. Inject into first negative text encoder embeds
+                    hidden_size_1 = negative_prompt_embeds_list[0].shape[-1]
+                    # Recalculate embedding for negative prompt context if needed, or reuse if appropriate
+                    # Reusing might be okay if batch size is consistent, recalculating is safer
+                    # For safety, let's recalculate if not available:
+                    if 'fidelity_embedding_1' not in locals() or fidelity_embedding_1.shape[0] != negative_prompt_embeds_list[0].shape[0]:
+                        fidelity_embedding_1 = self.fidelity_mlp(fidelity_tensor_ready, target_dim=hidden_size_1)
+                    else:
+                            fidelity_embedding_1 = fidelity_embedding_1.to(device=mlp_device, dtype=mlp_dtype) # Ensure device/dtype just in case
+
+                    # Ensure addition happens on the correct device
+                    target_neg_embed_1 = negative_prompt_embeds_list[0][:, 0].to(fidelity_embedding_1.device)
+                    negative_prompt_embeds_list[0][:, 0] = target_neg_embed_1 + 0.2 * fidelity_embedding_1
+
+                    # 4. Inject into second negative text encoder embeds
+                    hidden_size_2 = negative_prompt_embeds_list[1].shape[-1]
+                    if 'fidelity_embedding_2' not in locals() or fidelity_embedding_2.shape[0] != negative_prompt_embeds_list[1].shape[0]:
+                        fidelity_embedding_2 = self.fidelity_mlp(fidelity_tensor_ready, target_dim=hidden_size_2)
+                    else:
+                        fidelity_embedding_2 = fidelity_embedding_2.to(device=mlp_device, dtype=mlp_dtype) # Ensure device/dtype
+
+                    # Ensure addition happens on the correct device
+                    target_neg_embed_2 = negative_prompt_embeds_list[1][:, 0].to(fidelity_embedding_2.device)
+                    negative_prompt_embeds_list[1][:, 0] = target_neg_embed_2 + 0.2 * fidelity_embedding_2
             # ----- END FIDELITY EMBEDDING INJECTION (Negative) -----
-
             negative_prompt_embeds = torch.concat(negative_prompt_embeds_list, dim=-1)
 
         prompt_embeds_dtype = self.text_encoder_2.dtype if self.text_encoder_2 is not None else self.unet.dtype
