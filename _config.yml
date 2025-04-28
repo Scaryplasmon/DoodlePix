@@ -1,6 +1,6 @@
 # _config.yml
 
-theme: jekyll-theme-hacker
+theme: jekyll-theme-slate
 title: DoodlePix - Diffusion based Drawing Assistant
 description: Draw like a 5 years old and get some good results!
 
