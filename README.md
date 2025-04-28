@@ -6,26 +6,37 @@
 -------
 
 <details>
-  <summary><strong>The PIPE</strong></summary>
+  <summary><strong>Pipeline</strong></summary>
   
-  - **Base Model:** StableDiffusion 2.1  
   - **Inference:** fits in < 4GB  
-  - **Speed:** ~15 steps/second  
-  - **Training Requirements:** < 14GB
-  - **Pipeline:** InstructPix2Pix (+ custom fidelity input)
+  - **Resolution:** 512x512px  
+  - **Speed:** ~15 steps/second
+    
 </details>
 
 -------
 
 <details>
-  <summary><strong>The DATA</strong></summary>
+  <summary><strong>Training</strong></summary>
+  
+  - **Base Model:** [StableDiffusion 2.1](https://huggingface.co/stabilityai/stable-diffusion-2-1)
+  - **Training Requirements:** < 14GB
+  - **Setup:** NVIDIA RTX4070 12GB (bleeding into shared Windows memory)
+    
+<img src="assets/DoodlePix.png" alt="Training Loop" style="width:100%; height:auto; object-fit:contain;">
+
+</details>
+
+-------
+
+<details>
+  <summary><strong>Dataset</strong></summary>
 
   - **Data Size:** ~4.5k images
-  - **Image Generation:** Dalle-3, FLUX-PRO 1.1 and Flux-Redux-DEV 
-  - **Edge Extraction:** Canny, Fake Scribble, Scribble Xdog, HED soft edge 
-  - **Doodles** were hand-drawn and compose about 10% of the edges
+  - **Image Generation:** Dalle-3, Flux-Redux-DEV, SDXL, FLUX-PRO 1.1
+  - **Edge Extraction:** Canny, Fake Scribble, Scribble Xdog, HED soft edge, Manual
+  - **Doodles** were hand-drawn and compose about 20% of the edges
 
-    To have maximum control over the Dataset, a few  apps were built 
 </details>
 
 
@@ -126,35 +137,6 @@ More Examples
     </td>
     <td style="text-align:center;">
       <img src="assets/TorchSingle.gif" alt="Torch Normal" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
-    </td>
-  </tr>
-</table>
-<table style="width:100%; height: 164px; table-layout: fixed;">
-  <tr>
-    <td colspan="5" style="text-align:center; font-weight:bold; font-size:0.9rem; padding-bottom:8px;">
-      Prompt: f*, axe, metal, wooden handle. grey, brown wood
-    </td>
-  </tr>
-  <tr>
-    <td style="text-align:center;">
-      <strong>Image</strong><br>
-      <img src="assets/axe.png" alt="Axe Image" style="width:150px; height:150px; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>Normal</strong><br>
-      <img src="assets/AxeNormal.gif" alt="Axe Normal" style="width:150px; height:150px; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>3D</strong><br>
-      <img src="assets/Axe3D.gif" alt="Axe 3D" style="width:150px; height:150px; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>Outline</strong><br>
-      <img src="assets/AxeOutline.gif" alt="Axe Outline" style="width:150px; height:150px; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>Flat</strong><br>
-      <img src="assets/AxeFlat.gif" alt="Axe Flat" style="width:150px; height:150px; object-fit:contain;">
     </td>
   </tr>
 </table>
@@ -587,105 +569,11 @@ The model shows great color understanding as a byproduct of the InstructPix2Pix 
   </tr>
 </table>
 
-The model generates acceptable results with as few as 4 steps.
-
-<table style="width:100%; height: 164px; table-layout: fixed;">
-  <tr>
-    <td colspan="8" style="text-align:center; font-weight:bold; font-size:0.9rem; padding-bottom:8px;">
-      Prompt: f4, alien, red skin, white shirt, white background.
-    </td>
-  </tr>
-  <tr>
-    <td style="text-align:center;">
-      <strong>Drawing</strong><br>
-      <img src="assets/alien/alienDrawing.png" alt="Alien Drawing" style="width:150px; height:150px; height:auto; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>4 </strong><br>
-      <img src="assets/alien/AlienD_4steps.png" alt="Alien 4" style="width:150px; height:150px; height:auto; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>8 </strong><br>
-      <img src="assets/alien/AlienD_8steps.png" alt="Alien 8" style="width:150px; height:150px; height:auto; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>14</strong><br>
-      <img src="assets/alien/AlienD_14steps.png" alt="Alien 14" style="width:150px; height:150px; height:auto; object-fit:contain;">
-    </td>
-  </tr>
-  <tr>
-    <td style="text-align:center;">
-      <strong>20</strong><br>
-      <img src="assets/alien/AlienD_20steps.png" alt="Alien 20" style="width:150px; height:150px; height:auto; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>32</strong><br>
-      <img src="assets/alien/AlienD_32steps.png" alt="Alien 32" style="width:150px; height:150px; height:auto; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>44</strong><br>
-      <img src="assets/alien/AlienD_44steps.png" alt="Alien 44" style="width:150px; height:150px; height:auto; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>60</strong><br>
-      <img src="assets/alien/AlienD_60steps.png" alt="Alien 60" style="width:150px; height:150px; height:auto; object-fit:contain;">
-    </td>
-  </tr>
-</table>
-
-<table style="width:100%; height: 164px; table-layout: fixed;">
-  <tr>
-    <td colspan="8" style="text-align:center; font-weight:bold; font-size:0.9rem; padding-bottom:8px;">
-      Prompt: f4, alien, red skin, white shirt, white background.
-    </td>
-  </tr>
-  <tr>
-    <td style="text-align:center;">
-      <strong>Canny</strong><br>
-      <img src="assets/alien/alienCanny.png" alt="Alien Canny" style="width:150px; height:150px; height:auto; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>4 </strong><br>
-      <img src="assets/alien/AlienC_4steps.png" alt="Alien Canny 4" style="width:150px; height:150px; height:auto; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>8 </strong><br>
-      <img src="assets/alien/AlienC_8steps.png" alt="Alien Canny 8" style="width:150px; height:150px; height:auto; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>14</strong><br>
-      <img src="assets/alien/AlienC_14steps.png" alt="Alien Canny 14" style="width:150px; height:150px; height:auto; object-fit:contain;">
-    </td>
-  </tr>
-  <tr>
-    <td style="text-align:center;">
-      <strong>20</strong><br>
-      <img src="assets/alien/AlienC_20steps.png" alt="Alien Canny 20" style="width:150px; height:150px; height:auto; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>32</strong><br>
-      <img src="assets/alien/AlienC_32steps.png" alt="Alien Canny 32" style="width:150px; height:150px; height:auto; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>44</strong><br>
-      <img src="assets/alien/AlienC_44steps.png" alt="Alien Canny 44" style="width:150px; height:150px; height:auto; object-fit:contain;">
-    </td>
-    <td style="text-align:center;">
-      <strong>60</strong><br>
-      <img src="assets/alien/AlienC_60steps.png" alt="Alien Canny 60" style="width:150px; height:150px; height:auto; object-fit:contain;">
-    </td>
-  </tr>
-</table>
-
 <details>
   <summary><strong>Limitations</strong></summary>
   
   - The **Model** was trained mainly on objects, items. Things rather than Characters.
-  - Swords and Blades are a work in progress (lack of Doodle inputs).
-  - Flat style wasn't properly learned due to lack of data.
-  - Fidelity 0 (f0) is actually high fidelity due to lack of data.
   - It inherits most of the limitations of the StableDiffusion 2.1 model.
-  - Training was done at minimum batch size and resolution cause of GPU limitations.
     
 </details>
 
@@ -697,7 +585,7 @@ The model generates acceptable results with as few as 4 steps.
   </p>
   
   <p>
-    While most models and controlnets were trained using canny or similar line extractors as inputs (which focus on the most prominent lines in an image),
+    While most models and controlnets were trained using canny or similar line extractors as inputs (which focuses on the most prominent lines in an image),
   drawings are made with intention. A few squiggly lines placed in the right place can sometimes deliver a much better idea of what's being represented in the image:
   </p>
   
@@ -735,7 +623,7 @@ The model generates acceptable results with as few as 4 steps.
   <summary><strong>DATA</strong></summary>
   
 - [ ] Increase amount of hand-drawn line inputs
-- [ ] Smaller-Bigger subject variations
+- [X] Smaller-Bigger subject variations
 - [ ] Background Variations
 - [ ] Increase Flat style references
 - [ ] Improve color matches in prompts
@@ -746,12 +634,10 @@ The model generates acceptable results with as few as 4 steps.
 <details>
   <summary><strong>Training</strong></summary>
   
-- [ ] Train full-precision with bigger batch size.
-- [ ] Implement "Details" injection.
 - [ ] Release V1.
 - [ ] Release DoodleCharacters (DoodlePix but for characters)
-- [ ] Release Lora Training code
-- [ ] Test Bigger Models
+- [X] Release Training code
+- [X] Release Lora Training code
       
 </details>
 
@@ -759,11 +645,11 @@ The model generates acceptable results with as few as 4 steps.
 
  - This is a custom implementation of the [Training](https://github.com/huggingface/diffusers/blob/main/examples/instruct_pix2pix/train_instruct_pix2pix.py) and [Pipeline](https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/stable_diffusion/pipeline_stable_diffusion_instruct_pix2pix.py) scripts from the [Diffusers repo](https://github.com/huggingface/diffusers)
   
- - Dataset was generated using Chat based DALLE-3, FLUX-1.1 PRO and [FLUX-REDUX-DEV](https://huggingface.co/black-forest-labs/FLUX.1-Redux-dev)
+ - Dataset was generated using Chat based DALLE-3, FLUX-1.1 PRO, [SDXL](https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0), [FLUX-REDUX-DEV](https://huggingface.co/black-forest-labs/FLUX.1-Redux-dev)
    
  - Edge extraction was made easy thanks to [Fannovel16's ComfyUI Controlnet Aux](https://github.com/Fannovel16/comfyui_controlnet_aux)
 
  - [ComfyUI](https://www.comfy.org/) was a big part of the Data Development process
- - Around 40% of the images were captioned using [Moondream2](https://huggingface.co/vikhyatk/moondream2)
+ - Around 30% of the images were captioned using [Moondream2](https://huggingface.co/vikhyatk/moondream2)
  - Dataset Handlers were built using [PyQT](https://doc.qt.io/qtforpython-6/index.html)
- - Huge Thanks to the OpenSource community for hosting and sharing so much cool stuff online
+ - Huge Thanks to the OpenSource community for hosting and sharing so much cool stuff
