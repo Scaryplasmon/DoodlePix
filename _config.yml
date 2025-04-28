@@ -7,7 +7,7 @@ plugins:
   - jemoji
 
 title: DoodlePix - Diffusion based Drawing Assistant
-description: Fidelity-controlled image generation from doodle inputs using a modified InstructPix2Pix framework. AKA Draw like a 5 years old and get great results!
+description: Fidelity-controlled image generation from doodle inputs using a modified InstructPix2Pix framework.
 
 commonmark:
   options: ["SMART", "FOOTNOTES"]
