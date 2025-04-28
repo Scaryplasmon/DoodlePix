@@ -162,27 +162,27 @@ More Examples
   <tr>
     <td style="text-align:center;">
       input<br>
-      <img src="assets/ringIn.png" alt="Input" style="width:128px; height:128px; object-fit:contain;">
+      <img src="assets/ringIn.png" alt="Input" style="width:120px; height:120px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       F0<br>
-      <img src="assets/ringF0.webp" alt="Googh" style="width:128px; height:128px; object-fit:contain;">
+      <img src="assets/ringF0.webp" alt="Googh" style="width:120px; height:120px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       F9<br>
-      <img src="assets/ringF9.webp" alt="DontStarve" style="width:128px; height:128px; object-fit:contain;">
+      <img src="assets/ringF9.webp" alt="DontStarve" style="width:120px; height:120px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       input<br>
-      <img src="assets/fireIn.png" alt="Input" style="width:128px; height:128px; object-fit:contain;">
+      <img src="assets/fireIn.png" alt="Input" style="width:120px; height:120px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       F0<br>
-      <img src="assets/fireF0.webp" alt="Googh" style="width:128px; height:128px; object-fit:contain;">
+      <img src="assets/fireF0.webp" alt="Googh" style="width:120px; height:120px; object-fit:contain;">
     </td>
     <td style="text-align:center;">
       F9<br>
-      <img src="assets/fireF9.webp" alt="DontStarve" style="width:128px; height:128px; object-fit:contain;">
+      <img src="assets/fireF9.webp" alt="DontStarve" style="width:120px; height:120px; object-fit:contain;">
     </td>
   </tr>
 </table>
