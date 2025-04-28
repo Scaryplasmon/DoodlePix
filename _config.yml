@@ -1,24 +1,16 @@
 # _config.yml
 
-theme: jekyll-theme-slate
-title: DoodlePix - Diffusion based Drawing Assistant
-description: 
-
-theme: jekyll-theme-cayman
+theme: jekyll-theme-hacker
 
 plugins:
-  - jekyll-commonmark-ghpages
   - jekyll-seo-tag
   - jemoji
 
-# Optional: Site Title and Description (used by the theme and jekyll-seo-tag)
 title: DoodlePix - Diffusion based Drawing Assistant
 description: Fidelity-controlled image generation from doodle inputs using a modified InstructPix2Pix framework. AKA Draw like a 5 years old and get great results!
 
-# Configuration for the CommonMark processor (optional, defaults are usually fine)
 commonmark:
-  options: ["SMART", "FOOTNOTES"] # Enable smart quotes and footnotes
-  extensions: ["strikethrough", "autolink", "table", "tagfilter"] # Enable useful extensions
+  options: ["SMART", "FOOTNOTES"]
+  extensions: ["strikethrough", "autolink", "table", "tagfilter"]
 
-# Ensure README is included if you don't have an index.md/html
 include: ["README.md"]
