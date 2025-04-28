@@ -25,6 +25,18 @@
     
 <img src="assets/DoodlePix.png" alt="Training Loop" style="width:100%; height:auto; object-fit:contain;">
 
+The model leverages an InstructPix2Pix framework adapted for fidelity-controlled image generation from doodle inputs. The training loop processes triplets of (original doodle, edited target image, text prompt with embedded fidelity `f[0-9]`). Input images are encoded into the latent space via a VAE encoder. The text prompt is processed by a CLIP text encoder, and the extracted fidelity value ($F \in [0.0, 0.9]$) generates a corresponding fidelity embedding via the FidelityMLP. This fidelity embedding modulates the CLIP text embeddings, injecting the desired adherence level.
+
+The core diffusion process trains a U-Net to predict the noise ($\epsilon$) added to the VAE-encoded *edited target* latents. Crucially, the U-Net is conditioned on both the fidelity-modulated text embeddings (via cross-attention) and the VAE-encoded *original doodle* latents (concatenated channel-wise with the noisy target latents).
+
+The optimization objective combines two loss terms:
+1.  A reconstruction loss ($||\epsilon - \epsilon_\theta||^2$), minimizing the MSE between the sampled noise ($\epsilon$) and the U-Net's predicted noise ($\epsilon_\theta$).
+2.  A fidelity-aware L1 loss, calculated on decoded images ($P_{i}$), which balances adherence to the original input ($O_{i}$) and the edited target ($E_{i}$) based on the normalized fidelity value $F$: $F \cdot L1(P_{i}, O_{i}) + (1 - F) \cdot L1(P_{i}, E_{i})$.
+
+The total loss drives gradient updates via an AdamW optimizer, simultaneously training the U-Net and the FidelityMLP. 
+
+This dual-conditioning and dual-loss approach enables fine-grained control over the generated image's Faithfulness and Creativity.
+
 </details>
 
 -------
@@ -39,6 +51,7 @@
 
 </details>
 
+-------
 
 ## Fidelity Embedding in Action
 
@@ -137,6 +150,39 @@ More Examples
     </td>
     <td style="text-align:center;">
       <img src="assets/TorchSingle.gif" alt="Torch Normal" style="width:100%; max-width:150px; height:auto; object-fit:contain;">
+    </td>
+  </tr>
+</table>
+
+<table style="width:100%; height: 140px; table-layout: fixed;">
+  <tr>
+    <td colspan="3" style="text-align:center; font-weight:italic; font-size:0.9rem; padding-bottom:0px;">
+    </td>
+  </tr>
+  <tr>
+    <td style="text-align:center;">
+      input<br>
+      <img src="assets/ringIn.png" alt="Input" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      F0<br>
+      <img src="assets/ringF0.webp" alt="Googh" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      F9<br>
+      <img src="assets/ringF9.webp" alt="DontStarve" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      input<br>
+      <img src="assets/fireIn.png" alt="Input" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      F0<br>
+      <img src="assets/fireF0.webp" alt="Googh" style="width:140px; height:140px; object-fit:contain;">
+    </td>
+    <td style="text-align:center;">
+      F9<br>
+      <img src="assets/fireF9.webp" alt="DontStarve" style="width:140px; height:140px; object-fit:contain;">
     </td>
   </tr>
 </table>
@@ -523,7 +569,7 @@ More Examples:
 
 
 
-The model shows great color understanding as a byproduct of the InstructPix2Pix architecture.
+The model shows great color understanding.
 
 <table style="width:100%; height: 164px; table-layout: fixed;">
   <tr>
