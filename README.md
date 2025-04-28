@@ -1,5 +1,12 @@
-<h3>DoodlePix</h3>
-<p><em>Diffusion based Drawing Assistant</em></p>
+<h1>DoodlePix</h1>
+<h3>Diffusion based Drawing Assistant</h3>
+
+<p><em>Aka</em></p>
+
+<p><em>Draw like a 5-year-old but get Great results!</em></p>
+
+[![WebPage](https://img.shields.io/badge/Web-Page-green)](https://scaryplasmon.github.io/DoodlePix/)
+
 
 <p>
   <a href="assets/DoodlePixy.gif">
@@ -23,7 +30,7 @@
   <summary><strong>Training</strong></summary>
   <ul>
     <li><strong>Base Model:</strong> <a href="https://huggingface.co/stabilityai/stable-diffusion-2-1">StableDiffusion 2.1</a></li>
-    <li><strong>Training Requirements:</strong> &lt; 14GB</li> <li><strong>Setup:</strong> NVIDIA RTX4070 12GB (bleeding into shared Windows memory)</li>
+    <li><strong>Training Requirements:</strong> &lt; 14GB</li> <li><strong>Setup:</strong> NVIDIA RTX4070 </li>
   </ul>
   <p>
     <img src="assets/DoodlePix.png" alt="Training Loop" style="width:100%; height:auto; object-fit:contain;">
