@@ -675,12 +675,6 @@
     </tbody>
   </table>
   <p>
-    To address this, I train a <em>Fidelity embedding</em> that injects an explicit fidelity signal into the Unet, allowing it to modulate its denoising behavior accordingly.
-  </p>
-  <p>
-    The FidelityMLP (ranging from 0 to 9; f0–f9) lets users decide how much the model should "correct" their drawing.
-  </p>
-  <p>
     Although the InstructPix2Pix pipeline supports an ImageGuidance factor to control adherence to the input image, it tends to follow the drawing too strictly at higher values while losing compositional nuances at lower values.
   </p>
 </details>
