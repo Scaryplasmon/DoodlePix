@@ -33,7 +33,7 @@ def resize_lmdb(lmdb_path, target_size_mb, buffer_increment_mb=64):
     new_path = f"{lmdb_path}_resized_{target_size_mb}mb"
     
     current_attempt_mb = target_size_mb
-    max_attempts = 10
+    max_attempts = 40
     attempt = 0
 
     while attempt < max_attempts:
@@ -132,9 +132,9 @@ def resize_lmdb(lmdb_path, target_size_mb, buffer_increment_mb=64):
 
 if __name__ == "__main__":
     # Example usage
-    LMDB_PATH = "data/DoodlePixV6_lmdb"
-    TARGET_SIZE_MB = 1240  # Desired size
-    BUFFER_INCREMENT_MB = 6  # Increment if needed
+    LMDB_PATH = "Detailer/Data_lmdb"
+    TARGET_SIZE_MB = 8260  # Desired size
+    BUFFER_INCREMENT_MB = 20  # Increment if needed
 
     success, final_size, new_path = resize_lmdb(LMDB_PATH, TARGET_SIZE_MB, BUFFER_INCREMENT_MB)
     

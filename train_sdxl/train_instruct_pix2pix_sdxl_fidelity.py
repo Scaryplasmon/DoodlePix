@@ -26,7 +26,7 @@ from packaging import version
 from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import AutoTokenizer, PretrainedConfig
-
+from typing import Optional
 import diffusers
 from diffusers import AutoencoderKL, DDPMScheduler, UNet2DConditionModel
 from diffusers.optimization import get_scheduler
@@ -47,6 +47,9 @@ import pickle
 import io
 from torch.utils.data import Dataset as TorchDataset
 import random
+import lpips
+from pytorch_msssim import ssim
+import json
 
 if is_wandb_available():
     import wandb
@@ -168,9 +171,9 @@ def log_validation(
                         edited_image.save(os.path.join(step_dir, f"edited_{base_name}_f{fidelity}.png"))
                         current_edited_images.append(edited_image)
 
-                        # Save the exact prompt used
-                        with open(os.path.join(step_dir, f"prompt_{base_name}_f{fidelity}.txt"), "w", encoding='utf-8') as f:
-                            f.write(fidelity_prompt)
+                        # # Save the exact prompt used
+                        # with open(os.path.join(step_dir, f"prompt_{base_name}_f{fidelity}.txt"), "w", encoding='utf-8') as f:
+                        #     f.write(fidelity_prompt)
 
                     except Exception as e:
                         logger.error(f"Failed to generate/save edited image {base_name} with fidelity {fidelity}: {e}", exc_info=True)
@@ -239,12 +242,27 @@ def import_model_class_from_model_name_or_path(
 def parse_args():
     parser = argparse.ArgumentParser(description="Script to train Stable Diffusion XL for InstructPix2Pix.")
     parser.add_argument(
+        "--no_proxy",
+        default=False,
+        action="store_true",
+        help=(
+            "Whether to use proxy loss for fidelity or actual fidelity loss"
+        ),
+    )
+    parser.add_argument(
+        "--fidelity_loss_type",
+        type=str,
+        default="l1",
+        choices=["l1", "ssim", "lpips"],
+        help="Type of loss for the full fidelity calculation ('l1', 'ssim', 'lpips'). Only used if --no_proxy is True.",
+    )
+    parser.add_argument(
         "--use_fidelity_loss",
         action="store_true",
         help="Enable the explicit fidelity loss term during training.",
     )
     parser.add_argument(
-        "--fidelity_loss_weight",
+        "--fidelity_weight",
         type=float,
         default=0.1, # Start with a small weight, requires tuning
         help="Weighting factor for the explicit fidelity loss term.",
@@ -252,7 +270,7 @@ def parse_args():
     parser.add_argument(
         "--fidelity_loss_freq",
         type=int,
-        default=1, # Calculate every step by default
+        default=10, # Calculate every step by default
         help="Calculate the fidelity loss every N steps (set > 1 to reduce computational cost).",
     )
     parser.add_argument(
@@ -689,37 +707,80 @@ class LMDBImagePromptDataset(TorchDataset):
 
         return sample
 
-def compute_fidelity_loss(pred_images, input_images, target_images, fidelity_values):
+def compute_fidelity_loss(
+    pred_images: torch.Tensor,
+    input_images: torch.Tensor,
+    target_images: torch.Tensor,
+    fidelity_values: torch.Tensor,
+    loss_type: str = "l1",
+    lpips_model: Optional[nn.Module] = None,
+    device: torch.device = torch.device("cpu") # Pass the device
+) -> torch.Tensor:
     """
-    Compute a loss that teaches the model what fidelity means.
-    
+    Compute a fidelity-weighted loss balancing input preservation and edit strength.
+
     Args:
-        pred_images: The predicted images from the model
-        input_images: The input drawings/images
-        target_images: The target edited images
-        fidelity_values: Tensor of fidelity values (normalized to [0,1])
-    
+        pred_images: Predicted images from the model [B, C, H, W], range [-1, 1] or [0, 1].
+        input_images: Original input images [B, C, H, W], range [-1, 1] or [0, 1].
+        target_images: Target edited images [B, C, H, W], range [-1, 1] or [0, 1].
+        fidelity_values: Batch of fidelity control values (normalized to [0, 1]). [B]
+        loss_type: Type of loss ('l1', 'ssim', 'lpips').
+        lpips_model: Initialized LPIPS model (required if loss_type is 'lpips').
+        device: The torch device to run calculations on.
+
     Returns:
-        A loss tensor that encourages the model to respect fidelity values
+        A loss tensor.
     """
-    # batch_size = pred_images.shape[0]
-    
-    
-    # Calculate structural similarity between pred and input
-    pred_input_diff = torch.abs(pred_images - input_images).mean(dim=[1,2,3])
-    
-    # Calculate structural similarity between pred and target
-    pred_target_diff = torch.abs(pred_images - target_images).mean(dim=[1,2,3])
-    
-    # For high fidelity, minimize pred_input_diff
-    # For low fidelity, minimize pred_target_diff
-    fidelity_weights = fidelity_values.view(-1)
-    inverse_fidelity = 1 - fidelity_weights
-    
-    # Weighted loss based on fidelity
-    loss = (fidelity_weights * pred_input_diff) + (inverse_fidelity * pred_target_diff)
-    
-    return loss.mean()
+    # Ensure images are on the correct device and float32
+    pred_images = pred_images.to(device=device, dtype=torch.float32)
+    input_images = input_images.to(device=device, dtype=torch.float32)
+    target_images = target_images.to(device=device, dtype=torch.float32)
+    fidelity_values = fidelity_values.to(device=device, dtype=torch.float32).view(-1) # Ensure shape [B]
+
+    batch_size = pred_images.shape[0]
+    dist_to_input = torch.zeros(batch_size, device=device)
+    dist_to_target = torch.zeros(batch_size, device=device)
+
+    if loss_type == "l1":
+        # L1 Loss (Absolute Difference)
+        dist_to_input = torch.abs(pred_images - input_images).mean(dim=[1, 2, 3])
+        dist_to_target = torch.abs(pred_images - target_images).mean(dim=[1, 2, 3])
+
+    elif loss_type == "ssim":
+        # SSIM Loss: ssim function returns similarity (higher is better), so loss is 1 - ssim
+        # Ensure images are in [0, 1] range for SSIM if they are not already
+        pred_images_01 = (pred_images + 1) / 2 if pred_images.min() < 0 else pred_images
+        input_images_01 = (input_images + 1) / 2 if input_images.min() < 0 else input_images
+        target_images_01 = (target_images + 1) / 2 if target_images.min() < 0 else target_images
+
+        # Calculate SSIM per image in the batch
+        for i in range(batch_size):
+             # data_range is 1.0 since images are normalized to [0, 1]
+            dist_to_input[i] = 1.0 - ssim(pred_images_01[i].unsqueeze(0), input_images_01[i].unsqueeze(0), data_range=1.0, size_average=True)
+            dist_to_target[i] = 1.0 - ssim(pred_images_01[i].unsqueeze(0), target_images_01[i].unsqueeze(0), data_range=1.0, size_average=True)
+
+    elif loss_type == "lpips":
+        # LPIPS Loss: Measures perceptual distance (lower is better)
+        if lpips_model is None:
+            raise ValueError("lpips_model must be provided for loss_type 'lpips'")
+        print("the device is", device)
+        # LPIPS expects input range [-1, 1]
+        pred_images_norm = pred_images if pred_images.min() >= -1 else (pred_images * 2) - 1
+        input_images_norm = input_images if input_images.min() >= -1 else (input_images * 2) - 1
+        target_images_norm = target_images if target_images.min() >= -1 else (target_images * 2) - 1
+
+        dist_to_input = lpips_model(pred_images_norm, input_images_norm).squeeze()
+        dist_to_target = lpips_model(pred_images_norm, target_images_norm).squeeze()
+
+    else:
+        raise ValueError(f"Unknown loss_type: {loss_type}")
+
+    # Weighted combination based on fidelity:
+    # High fidelity (close to 1) -> emphasize distance to input
+    # Low fidelity (close to 0) -> emphasize distance to target
+    weighted_loss = (fidelity_values * dist_to_input) + ((1 - fidelity_values) * dist_to_target)
+
+    return weighted_loss.mean()
 
 def save_base_model_structure(output_dir, tokenizers, text_encoders, vae, scheduler, pipeline_class_name="StableDiffusionXLInstructPix2PixPipeline"):
     """
@@ -771,6 +832,7 @@ def save_base_model_structure(output_dir, tokenizers, text_encoders, vae, schedu
 
     logger.info("Base model structure saving complete.")
 
+lpips_loss_fn = None
 def main():
     args = parse_args()
 
@@ -1413,16 +1475,16 @@ def main():
     # Set UNet to trainable.
     unet.train()
     
-    if accelerator.is_main_process:
-        save_base_model_structure(
-            output_dir=args.output_dir,
-            tokenizers=[tokenizer_1, tokenizer_2],
-            text_encoders=[text_encoder_1, text_encoder_2],
-            vae=vae,
-            scheduler=noise_scheduler,
-            # Optional: pass the actual pipeline class if needed, otherwise default works
-            # pipeline_class_name=StableDiffusionXLInstructPix2PixPipeline.__name__
-        )
+    # if accelerator.is_main_process:
+    #     save_base_model_structure(
+    #         output_dir=args.output_dir,
+    #         tokenizers=[tokenizer_1, tokenizer_2],
+    #         text_encoders=[text_encoder_1, text_encoder_2],
+    #         vae=vae,
+    #         scheduler=noise_scheduler,
+    #         # Optional: pass the actual pipeline class if needed, otherwise default works
+    #         # pipeline_class_name=StableDiffusionXLInstructPix2PixPipeline.__name__
+    #     )
 
     # Adapted from pipelines.StableDiffusionXLPipeline.encode_prompt
     def encode_prompt(text_encoders, tokenizers, prompt):
@@ -1663,29 +1725,52 @@ def main():
 
                 clean_captions_batch = []
                 fidelity_values_batch = []
-                default_fidelity = 0.5
+                default_fidelity = 0.7
 
-                current_fidelity_mlp = accelerator.unwrap_model(fidelity_mlp) # Get unwrapped MLP
 
                 # 1. Extract Fidelity and Clean Captions
                 for caption in captions:
-                     match = re.match(r"^\s*f\s*(\d+),?\s*", caption, re.IGNORECASE)
-                     if match:
-                         f_int = int(match.group(1))
-                         f_int = max(0, min(f_int, 9))
-                         fidelity_val = f_int / 9.0
-                         clean_caption = caption[match.end():].strip()
-                     else:
-                         fidelity_val = default_fidelity
-                         clean_caption = caption # Use original if no prefix
-                     clean_captions_batch.append(clean_caption)
-                     fidelity_values_batch.append(fidelity_val)
+                    # Regex to find "f[number]," at the start, ignoring spaces
+                    match = re.match(r"^\s*f\s*(\d+),?\s*", caption, re.IGNORECASE)
+                    if match:
+                        f_int = int(match.group(1))
+                        f_int = max(1, min(f_int, 9)) # Clamp between 1 and 9
+                        # Normalize to [0.1, 0.9] range
+                        fidelity_val = 0.1 + (f_int - 1) * (0.8 / 8)
+                        clean_caption = caption[match.end():].strip() # Get text after "fX,"
+                    else:
+                        fidelity_val = default_fidelity # Default if no prefix found
+                        clean_caption = caption # Use original caption
+                    clean_captions_batch.append(clean_caption)
+                    fidelity_values_batch.append(fidelity_val)
+                    
+                    
+                current_fidelity_mlp = accelerator.unwrap_model(fidelity_mlp) # Get unwrapped MLP
 
                 fidelity_tensor = torch.tensor(fidelity_values_batch, device=accelerator.device).view(-1, 1).to(dtype=current_fidelity_mlp.net[0].weight.dtype)
+                
+                
+                # --- 2. Get Fidelity Embedding from MLP ---
+                # Use the correct dtype for the MLP input (often float32 is safer)
+                fidelity_tensor = torch.tensor(fidelity_values_batch, device=accelerator.device).view(-1, 1).to(dtype=torch.float32)
+                
+                # Get the unwrapped MLP model to call forward
+                current_fidelity_mlp = accelerator.unwrap_model(fidelity_mlp)
+                
+                # Generate the base fidelity embedding (shape: [B, mlp_hidden_size])
+                # Ensure MLP is in eval mode if it has dropout/batchnorm layers, although yours doesn't seem to.
+                # fidelity_mlp.eval() # Optional: uncomment if MLP has dropout/batchnorm
+                with torch.no_grad(): # MLP doesn't need gradients for this forward pass
+                    base_fidelity_embedding = current_fidelity_mlp(fidelity_tensor)
+                # fidelity_mlp.train() # Optional: uncomment if you set it to eval() before
+
+                # Save the normalized fidelity values for loss calculation later (shape: [B])
+                fidelity_tensor_for_loss = fidelity_tensor.squeeze(-1)
 
                 # 2. Encode Cleaned Captions and Inject Fidelity
                 prompt_embeds_list = []
                 pooled_prompt_embeds = None
+                injection_scale = args.fidelity_weight
                 with torch.no_grad(): # Text encoders are frozen
                     for idx, (tokenizer, text_encoder) in enumerate(zip(tokenizers, text_encoders)):
                         text_inputs = tokenizer(
@@ -1710,21 +1795,25 @@ def main():
                         current_prompt_embeds = prompt_embeds_output.hidden_states[-2]
 
                         # # Inject Fidelity Embedding (using unwrapped MLP)
-                        # target_dim = current_prompt_embeds.shape[-1]
-                        # fidelity_embedding = current_fidelity_mlp(fidelity_tensor, target_dim=target_dim)
+                        target_dim = current_prompt_embeds.shape[-1]
+                        # Re-run MLP forward pass *if* target_dim is different from MLP's native output
+                        # Or, if MLP always outputs fixed size matching one encoder, project/slice here.
+                        # Assuming FidelityMLP's _adjust_dimension handles it:
+                        fidelity_embedding_adjusted = current_fidelity_mlp(fidelity_tensor, target_dim=target_dim)
+                        
+                        # Ensure dtype matches before adding
+                        fidelity_embedding_adjusted = fidelity_embedding_adjusted.to(dtype=current_prompt_embeds.dtype)
 
-                        # # Ensure dtype matches before adding
-                        # fidelity_embedding = fidelity_embedding.to(dtype=current_prompt_embeds.dtype)
-
-                        # # Add to the first token embedding ([CLS])
-                        # current_prompt_embeds[:, 0] = current_prompt_embeds[:, 0] + 0.2 * fidelity_embedding
+                        # Add to the first token embedding ([CLS] or BOS)
+                        # Shape: [B, 1, H_encoder] + [B, 1, H_encoder]
+                        current_prompt_embeds[:, 0:1, :] = current_prompt_embeds[:, 0:1, :] + injection_scale * fidelity_embedding_adjusted.unsqueeze(1)
+                        # --------------------------------------------------------
 
                         prompt_embeds_list.append(current_prompt_embeds)
 
                 # Concatenate embeds from both encoders (output is weight_dtype/fp16)
                 encoder_hidden_states = torch.concat(prompt_embeds_list, dim=-1).to(dtype=weight_dtype)
                 add_text_embeds = pooled_prompt_embeds.to(dtype=weight_dtype)
-                # ----- END ENCODE PROMPT + FIDELITY INJECTION -----
 
                 # Get original image embeds (latents are float32)
                 original_image_embeds = vae.encode(original_pixel_values_vae).latent_dist.sample()
@@ -1784,32 +1873,52 @@ def main():
                 # Compute loss in float32 for stability
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
                 
-                simple_fidelity_loss = None
-                
-                if args.use_fidelity_loss and (global_step + 1) % args.fidelity_loss_freq == 0:
-                    try:
-                        # Use the fidelity_tensor defined earlier (normalized 0-1)
-                        # Ensure fidelity_tensor was created correctly before this point using fidelity_values_batch
-                        fidelity_tensor_normalized = torch.tensor(fidelity_values_batch, device=accelerator.device).view(-1) # Shape [B]
+                 # --- Add Fidelity Loss Component ---
+                if args.use_fidelity_loss: # Check if fidelity loss is enabled
+                    fidelity_loss_component = torch.tensor(0.0, device=loss.device)
+                    # Use fidelity_tensor_for_loss (shape [B]) created earlier
 
-                        # Create scale tensor for broadcasting
-                        fidelity_scale = fidelity_tensor_normalized.view(-1, 1, 1, 1).to(device=model_pred.device)
+                    if args.no_proxy: # Using Full Fidelity Loss
+                        if (global_step + 1) % args.fidelity_loss_freq == 0: # Check frequency
+                            with torch.no_grad():
+                                # Decode prediction to pixel space
+                                pred_latents = noise_scheduler.step(model_pred.detach(), timesteps[0], noisy_latents, return_dict=False)[0]
+                                pred_latents = pred_latents.to(dtype=vae.dtype) # Match VAE dtype for decode
+                                pred_images = vae.decode(pred_latents / vae.config.scaling_factor, return_dict=False)[0]
+                                input_images = batch["original_pixel_values"].to(device=pred_images.device) # Already float32
+                                target_images = batch["edited_pixel_values"].to(device=pred_images.device) # Already float32
 
-                        # Calculate simple fidelity loss (scale magnitude of predicted noise)
-                        # Ensure calculation in float32 for stability
-                        simple_fidelity_loss = torch.mean(torch.abs(model_pred.float()) * fidelity_scale.float())
+                                # Initialize LPIPS if needed
+                                global lpips_loss_fn
+                                if args.fidelity_loss_type == 'lpips' and lpips_loss_fn is None:
+                                    logger.info("Initializing LPIPS model for SDXL script...")
+                                    lpips_loss_fn = lpips.LPIPS(net='vgg').to(accelerator.device)
+                                    lpips_loss_fn.eval()
 
-                        # --- Optional: Gradual fidelity weight schedule (like SD 1.5 example) ---
-                        fidelity_weight = min(args.fidelity_loss_weight, 0.01 + (args.fidelity_loss_weight - 0.01) * (global_step / max(1, args.max_train_steps // 2)))
-                        # # --- OR: Use fixed weight from args ---
-                        # fidelity_weight = args.fidelity_loss_weight
+                                # Compute full fidelity loss
+                                fidelity_loss_component = compute_fidelity_loss(
+                                    pred_images=pred_images,
+                                    input_images=input_images,
+                                    target_images=target_images,
+                                    fidelity_values=fidelity_tensor_for_loss,
+                                    loss_type=args.fidelity_loss_type,
+                                    lpips_model=lpips_loss_fn if args.fidelity_loss_type == 'lpips' else None,
+                                    device=accelerator.device
+                                )
+                            if accelerator.is_main_process and (global_step + 1) % 100 == 0:
+                               logger.info(f"Step {global_step+1}: Using FULL fidelity loss ({args.fidelity_loss_type}): {fidelity_loss_component.item():.4f}")
 
-                        # Add weighted simple fidelity loss to the main diffusion loss
-                        loss = loss + fidelity_weight * simple_fidelity_loss
+                    else: # Using Proxy Fidelity Loss
+                        if (global_step + 1) % args.fidelity_loss_freq == 0: # Check frequency
+                            fidelity_scale = fidelity_tensor_for_loss.view(-1, 1, 1, 1).to(device=model_pred.device)
+                            fidelity_loss_component = torch.mean(torch.abs(model_pred.float()) * fidelity_scale.float())
+                            2
+                            if accelerator.is_main_process and (global_step + 1) % 100 == 0:
+                               logger.info(f"Step {global_step+1}: Using PROXY fidelity loss: {fidelity_loss_component.item():.4f}")
 
-                    except Exception as e:
-                        logger.error(f"Error during simple fidelity loss calculation: {e}", exc_info=True)
-                        simple_fidelity_loss = None # Ensure it's None if error occurs
+                # Scale and add the fidelity loss component
+                fidelity_weight = min(args.fidelity_weight, args.fidelity_weight * (global_step / 100))
+                loss = loss + fidelity_weight * fidelity_loss_component
 
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
@@ -1827,10 +1936,8 @@ def main():
                     # Step the optimizer (accelerate handles scaler update)
                     optimizer.step()
                     lr_scheduler.step()
-                    # Zero the gradients *after* stepping the optimizer
                     optimizer.zero_grad()
 
-                    # --- EMA Update ---
                     if args.use_ema:
                         ema_unet.step(unet.parameters())
 

@@ -156,7 +156,7 @@ def create_lmdb_dataset(source_dir, lmdb_path, map_size_gb=None):
 # --- How to run it ---
 if __name__ == "__main__":
     # --- Configuration ---
-    SOURCE_DATA_DIR = 'data/Googh' # e.g., /content/drive/MyDrive/datasets/my_image_data
-    OUTPUT_LMDB_PATH = 'data/Googh_lmdb' # e.g., /content/drive/MyDrive/datasets/my_image_data.lmdb OR /content/my_image_data.lmdb if copying locally first
+    SOURCE_DATA_DIR = 'data/DoodlePixV6' # e.g., /content/drive/MyDrive/datasets/my_image_data
+    OUTPUT_LMDB_PATH = 'data/DoodlePixV6_lmdb' # e.g., /content/drive/MyDrive/datasets/my_image_data.lmdb OR /content/my_image_data.lmdb if copying locally first
 
     create_lmdb_dataset(SOURCE_DATA_DIR, OUTPUT_LMDB_PATH)

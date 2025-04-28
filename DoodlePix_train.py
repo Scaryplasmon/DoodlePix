@@ -1,5 +1,8 @@
-"""Script to fine-tune Stable Diffusion for InstructPix2Pix."""
+"""
+    Custom implementation of InstructPix2Pix training script from the diffusers repo
+    https://github.com/huggingface/diffusers/blob/main/examples/instruct_pix2pix/train_instruct_pix2pix.py
 
+"""
 import argparse
 import logging
 import math
@@ -7,7 +10,6 @@ import os
 import shutil
 from contextlib import nullcontext
 from pathlib import Path
-
 import accelerate
 import datasets
 import numpy as np
@@ -27,6 +29,7 @@ from packaging import version
 from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
+from typing import Optional
 
 import diffusers
 from diffusers import AutoencoderKL, DDPMScheduler, StableDiffusionInstructPix2PixPipeline, UNet2DConditionModel
@@ -37,12 +40,18 @@ from diffusers.utils.import_utils import is_xformers_available
 from diffusers.utils.torch_utils import is_compiled_module
 from datasets import Dataset, Image
 from PIL import Image as PILImage
-
+import glob
+from fidelity_mlp import FidelityMLP
+from pytorch_msssim import ssim
+import lpips
+import lmdb
+from torch.utils.data import Dataset as TorchDataset
+import io
+import pickle
+import re
+import random
 if is_wandb_available():
     import wandb
-
-# Will error if the minimal version of diffusers is not installed. Remove at your own risks.
-check_min_version("0.33.0.dev0")
 
 logger = get_logger(__name__, log_level="INFO")
 
@@ -61,7 +70,6 @@ def log_validation(
     try:
         logger.info("Running validation...")
         
-        # Create validation directory with epoch/step subdirectory
         validation_dir = os.path.join(args.output_dir, "validation")
         current_step = accelerator.step
         step_dir = os.path.join(validation_dir, f"step_{current_step}")
@@ -69,9 +77,9 @@ def log_validation(
         
         pipeline = pipeline.to(accelerator.device)
         pipeline.set_progress_bar_config(disable=True)
-
+        
         # Get all validation images and their corresponding prompts
-        val_images_dir = args.val_images_dir  # New argument needed
+        val_images_dir = args.val_images_dir
         try:
             image_files = [f for f in os.listdir(val_images_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
         except (FileNotFoundError, OSError) as e:
@@ -80,13 +88,14 @@ def log_validation(
         
         logger.info(f"Found {len(image_files)} validation images")
         
-        edited_images_dict = {}  # Store images for wandb logging
-        
+        edited_images_dict = {}
         if torch.backends.mps.is_available():
             autocast_ctx = nullcontext()
         else:
             autocast_ctx = torch.autocast(accelerator.device.type)
 
+        fidelity_levels = [2, 8]  # Low, high fidelity
+        
         with autocast_ctx:
             for image_file in image_files:
                 try:
@@ -94,52 +103,50 @@ def log_validation(
                     image_path = os.path.join(val_images_dir, image_file)
                     prompt_path = os.path.join(val_images_dir, f"{base_name}.txt")
                     
-                    # Skip if prompt file doesn't exist
                     if not os.path.exists(prompt_path):
                         logger.warning(f"Skipping {image_file} - no corresponding prompt file found")
                         continue
                         
-                    # Read prompt
                     with open(prompt_path, 'r', encoding='utf-8') as f:
                         validation_prompt = f.read().strip()
                         
-                    # Load and process original image
                     original_image = PILImage.open(image_path).convert("RGB")
                     
-                    # Save original image
                     try:
                         original_image.save(os.path.join(step_dir, f"original_{base_name}.png"))
                     except Exception as e:
                         logger.error(f"Failed to save original image {base_name}: {e}")
                         continue
-                    
-                    # Generate edited images
+
                     edited_images = []
-                    for idx in range(args.num_validation_images):
+                    for fidelity in fidelity_levels:
+                        generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
+                        fidelity_prompt = f"f{fidelity} {validation_prompt}"
+                        
                         try:
                             edited_image = pipeline(
-                                validation_prompt,
-                                negative_prompt="NSFW, nudity, bad, blurry, sex, photorealistic",
+                                fidelity_prompt,
+                                negative_prompt="NSFW, nudity, bad, blurry, sex",
                                 image=original_image,
                                 num_inference_steps=24,
                                 image_guidance_scale=1.5,
                                 guidance_scale=6.0,
                                 generator=generator,
+                                safety_checker=None
                             ).images[0]
                             
-                            # Save edited image
-                            edited_image.save(os.path.join(step_dir, f"edited_{base_name}_{idx}.png"))
+                            edited_image.save(os.path.join(step_dir, f"edited_{base_name}_f{fidelity}.png"))
                             edited_images.append(edited_image)
                             
-                            # Save prompt
-                            with open(os.path.join(step_dir, f"prompt_{base_name}_{idx}.txt"), "w") as f:
-                                f.write(validation_prompt)
+                            # with open(os.path.join(step_dir, f"prompt_{base_name}_f{fidelity}.txt"), "w") as f:
+                            #     f.write(fidelity_prompt)
+                                
                                 
                         except Exception as e:
-                            logger.error(f"Failed to generate/save edited image {base_name}_{idx}: {e}")
+                            logger.error(f"Failed to generate/save edited image {base_name} with fidelity {fidelity}: {e}")
                             continue
                     
-                    if edited_images:  # Only add to dict if we have successful edits
+                    if edited_images:
                         edited_images_dict[base_name] = {
                             "original": original_image,
                             "edited": edited_images,
@@ -150,17 +157,18 @@ def log_validation(
                     logger.error(f"Failed to process validation image {image_file}: {e}")
                     continue
 
-        # Log to wandb if enabled
         try:
             for tracker in accelerator.trackers:
                 if tracker.name == "wandb":
-                    wandb_table = wandb.Table(columns=WANDB_TABLE_COL_NAMES)
+                    wandb_table = wandb.Table(columns=WANDB_TABLE_COL_NAMES + ["Fidelity"])
                     for base_name, data in edited_images_dict.items():
-                        for edited_image in data["edited"]:
+                        for i, edited_image in enumerate(data["edited"]):
+                            fidelity = fidelity_levels[i % len(fidelity_levels)]
                             wandb_table.add_data(
                                 wandb.Image(data["original"]),
                                 wandb.Image(edited_image),
-                                data["prompt"]
+                                data["prompt"],
+                                f"f{fidelity}"
                             )
                     tracker.log({"validation": wandb_table})
         except Exception as e:
@@ -175,10 +183,38 @@ def log_validation(
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script for InstructPix2Pix.")
     parser.add_argument(
+        "--no_proxy",
+        default=False,
+        action="store_true",
+        help=(
+            "Whether to use proxy loss for fidelity or actual fidelity loss"
+        ),
+    )
+    parser.add_argument(
+        "--fidelity_weight",
+        type=float,
+        default=0.1,
+        help="Weight for the fidelity loss.",
+    )
+    parser.add_argument(
+        "--fidelity_loss_type",
+        type=str,
+        default="l1",
+        choices=["l1", "ssim", "lpips"],
+        help="Type of loss for the full fidelity calculation ('l1', 'ssim', 'lpips'). Only used if --no_proxy is True.",
+    )
+    parser.add_argument(
         "--pretrained_model_name_or_path",
         type=str,
         default=None,
         required=True,
+        help="Path to pretrained model or model identifier from huggingface.co/models.",
+    )
+    parser.add_argument(
+        "--pretrained_txtEncoder_path",
+        type=str,
+        default=None,
+        required=False,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
     )
     parser.add_argument(
@@ -470,6 +506,18 @@ def parse_args():
     parser.add_argument(
         "--enable_xformers_memory_efficient_attention", action="store_true", default=True, help="Whether or not to use xformers."
     )
+    parser.add_argument(
+        "--fidelity_mlp_learning_rate",
+        type=float,
+        default=1e-4,
+        help="Learning rate for the fidelity MLP",
+    )
+    parser.add_argument(
+        "--fidelity_mlp_path",
+        type=str,
+        default=None,
+        help="Path to fidelity MLP model or directory to save the model to.",
+    )
 
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
@@ -491,14 +539,88 @@ def convert_to_np(image, resolution):
     image = image.convert("RGB").resize((resolution, resolution))
     return np.array(image).transpose(2, 0, 1)
 
+class LMDBImagePromptDataset(TorchDataset):
+    """
+    PyTorch Dataset for loading image pairs and prompts from an LMDB database.
+    """
+    def __init__(self, lmdb_path, transform=None):
+        """
+        Args:
+            lmdb_path (str): Path to the LMDB database directory.
+            transform (callable, optional): Optional transform to be applied
+                                            on a sample. Should handle a dict
+                                            {'input_image': PIL, 'edited_image': PIL, 'edit_prompt': str}
+        """
+        self.lmdb_path = lmdb_path
+        self.transform = transform
+        self.env = None # Environment will be opened in __getitem__ if needed, better for multiprocessing
 
-def download_image(url):
-    image = PIL.Image.open(requests.get(url, stream=True).raw)
-    image = PIL.ImageOps.exif_transpose(image)
-    image = image.convert("RGB")
-    return image
+        logger.info(f"Initializing LMDB dataset from: {lmdb_path}")
 
+        try:
+            # Open temporarily to get keys and length
+            temp_env = lmdb.open(self.lmdb_path, readonly=True, lock=False, readahead=False, meminit=False)
+            with temp_env.begin(write=False) as txn:
+                self.length = txn.stat()['entries']
+                logger.info("Reading keys from LMDB... (This might take a moment)")
+                # Read all keys into memory - requires keys fit in RAM, usually okay.
+                self.keys = [key for key in tqdm(txn.cursor().iternext(keys=True, values=False), total=self.length, desc="Loading LMDB keys")]
+            temp_env.close()
+            logger.info(f"Found {self.length} entries in LMDB.")
+        except lmdb.Error as e:
+            logger.error(f"Failed to open or read LMDB at {lmdb_path}: {e}")
+            raise IOError(f"Could not initialize LMDB dataset at {lmdb_path}")
 
+    def _init_db(self):
+        # Open the environment in the current process.
+        # lock=False is important for multi-worker DataLoader
+        self.env = lmdb.open(self.lmdb_path, readonly=True, lock=False, readahead=False, meminit=False)
+
+    def __len__(self):
+        return self.length
+
+    def __getitem__(self, index):
+        # Open DB in each worker process if not already opened
+        if self.env is None:
+            self._init_db()
+
+        key = self.keys[index]
+        with self.env.begin(write=False) as txn:
+            serialized_data = txn.get(key)
+
+        if serialized_data is None:
+             raise KeyError(f"Key {key.decode('utf-8')} not found in LMDB (index {index}). This shouldn't happen.")
+
+        # Deserialize data
+        try:
+            input_img_bytes, edited_img_bytes, edit_prompt = pickle.loads(serialized_data)
+        except pickle.UnpicklingError as e:
+            raise RuntimeError(f"Failed to unpickle data for key {key.decode('utf-8')}: {e}")
+
+        # Decode images from bytes using PIL
+        try:
+            input_image = PILImage.open(io.BytesIO(input_img_bytes)).convert('RGB')
+            edited_image = PILImage.open(io.BytesIO(edited_img_bytes)).convert('RGB')
+        except Exception as e:
+            raise RuntimeError(f"Failed to decode image for key {key.decode('utf-8')}: {e}")
+
+        # Prepare sample dictionary
+        sample = {
+            'input_image': input_image,
+            'edited_image': edited_image,
+            'edit_prompt': edit_prompt # Prompt is already a string
+        }
+
+        # Apply transforms (which should handle the dictionary)
+        if self.transform:
+            # Your preprocess_train function needs to be adapted to take this dict
+            # or you define a transform chain that works on PIL images directly.
+            # Let's assume preprocess_train can be adapted or replaced by a transform.
+             sample = self.transform(sample)
+
+        return sample
+
+lpips_loss_fn = None
 def main():
     args = parse_args()
     if args.report_to == "wandb" and args.hub_token is not None:
@@ -566,15 +688,32 @@ def main():
     tokenizer = CLIPTokenizer.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
     )
+    
+    def tokenize_captions(captions):
+        """Helper function to tokenize captions using the loaded tokenizer."""
+        inputs = tokenizer(
+            captions, max_length=tokenizer.model_max_length, padding="max_length", truncation=True, return_tensors="pt"
+        )
+        return inputs.input_ids
+    
+
     text_encoder = CLIPTextModel.from_pretrained(
-        args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision, variant=args.variant
+        args.pretrained_model_name_or_path,
+        subfolder="text_encoder",
+        revision=args.revision,
+        variant=args.variant,
     )
+    
+    if args.gradient_checkpointing:
+        text_encoder.gradient_checkpointing_enable()
+
     vae = AutoencoderKL.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision, variant=args.variant
     )
     unet = UNet2DConditionModel.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="unet", revision=args.non_ema_revision
     )
+    
 
     # InstructPix2Pix uses an additional image for conditioning. To accommodate that,
     # it uses 8 channels (instead of 4) in the first (conv) layer of the UNet. This UNet is
@@ -596,9 +735,10 @@ def main():
 
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
+    # Freeze text encoder
     text_encoder.requires_grad_(False)
+    text_encoder.eval()  # Set to eval mode
 
-    # Create EMA for the unet.
     if args.use_ema:
         ema_unet = EMAModel(unet.parameters(), model_cls=UNet2DConditionModel, model_config=unet.config)
 
@@ -629,9 +769,16 @@ def main():
                     ema_unet.save_pretrained(os.path.join(output_dir, "unet_ema"))
 
                 for i, model in enumerate(models):
-                    model.save_pretrained(os.path.join(output_dir, "unet"))
+                    if isinstance(model, FidelityMLP):
+                        # Save FidelityMLP
+                        fidelity_mlp_path = os.path.join(output_dir, "fidelity_mlp")
+                        os.makedirs(fidelity_mlp_path, exist_ok=True)
+                        unwrapped_fidelity_mlp = accelerator.unwrap_model(model)
+                        unwrapped_fidelity_mlp.save_pretrained(fidelity_mlp_path)
+                    else:
+                        # Original save logic for other models
+                        model.save_pretrained(os.path.join(output_dir, "unet"))
 
-                    # make sure to pop weight so that corresponding model is not saved again
                     if weights:
                         weights.pop()
 
@@ -646,12 +793,20 @@ def main():
                 # pop models so that they are not loaded again
                 model = models.pop()
 
-                # load diffusers style into model
-                load_model = UNet2DConditionModel.from_pretrained(input_dir, subfolder="unet")
-                model.register_to_config(**load_model.config)
-
-                model.load_state_dict(load_model.state_dict())
-                del load_model
+                # Check if the model is FidelityMLP
+                if isinstance(model, FidelityMLP):
+                    # Load FidelityMLP
+                    fidelity_mlp_path = os.path.join(input_dir, "fidelity_mlp")
+                    if os.path.exists(fidelity_mlp_path):
+                        load_model = FidelityMLP.from_pretrained(fidelity_mlp_path)
+                        model.load_state_dict(load_model.state_dict())
+                        del load_model
+                else:
+                    # load diffusers style into model
+                    load_model = UNet2DConditionModel.from_pretrained(input_dir, subfolder="unet")
+                    model.register_to_config(**load_model.config)
+                    model.load_state_dict(load_model.state_dict())
+                    del load_model
 
         accelerator.register_save_state_pre_hook(save_model_hook)
         accelerator.register_load_state_pre_hook(load_model_hook)
@@ -669,167 +824,135 @@ def main():
             args.learning_rate * args.gradient_accumulation_steps * args.train_batch_size * accelerator.num_processes
         )
 
-    # Initialize the optimizer
+    # Load or create FidelityMLP
+    if args.fidelity_mlp_path:
+        if os.path.exists(args.fidelity_mlp_path):
+            logger.info(f"Loading FidelityMLP from {args.fidelity_mlp_path}")
+            fidelity_mlp = FidelityMLP.from_pretrained(args.fidelity_mlp_path)
+        else:
+            logger.info(f"Creating new FidelityMLP and will save to {args.fidelity_mlp_path}")
+            hidden_size = text_encoder.config.hidden_size
+            fidelity_mlp = FidelityMLP(hidden_size)
+            os.makedirs(args.fidelity_mlp_path, exist_ok=True)
+    else:
+        logger.info("Creating new FidelityMLP")
+        hidden_size = text_encoder.config.hidden_size
+        fidelity_mlp = FidelityMLP(hidden_size)
+
+    logger.info("This has Normalized Range 0-9")
+    
+    # Move fidelity_mlp to device
+    fidelity_mlp.to(accelerator.device)
+
+
     if args.use_8bit_adam:
         try:
             import bitsandbytes as bnb
         except ImportError:
-            raise ImportError(
-                "Please install bitsandbytes to use 8-bit Adam. You can do so by running `pip install bitsandbytes`"
-            )
-
+            raise ImportError("Please install bitsandbytes to use 8-bit Adam.")
         optimizer_cls = bnb.optim.AdamW8bit
     else:
         optimizer_cls = torch.optim.AdamW
+        
+    # Optimizer set for unet and fidelity_mlp
+
+    params_to_optimize = [
+        {"params": unet.parameters(), "lr": args.learning_rate},
+        {"params": fidelity_mlp.parameters(), "lr": args.fidelity_mlp_learning_rate if args.fidelity_mlp_learning_rate else args.learning_rate}
+    ]
 
     optimizer = optimizer_cls(
-        unet.parameters(),
-        lr=args.learning_rate,
+        params_to_optimize,
         betas=(args.adam_beta1, args.adam_beta2),
         weight_decay=args.adam_weight_decay,
         eps=args.adam_epsilon,
     )
     
-    def load_image_dataset(source_dir):
-        # Get all image files
-        input_dir = os.path.join(source_dir, "input_image")
-        image_files = [f for f in os.listdir(input_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
-        
-        dataset_dict = {
-            "input_image": [],
-            "edited_image": [],
-            "edit_prompt": []
-        }
-        
-        for img_file in image_files:
-            base_name = os.path.splitext(img_file)[0]
-            
-            # Get full paths
-            input_img_path = os.path.join(source_dir, "input_image", img_file)
-            edited_img_path = os.path.join(source_dir, "edited_image", img_file)
-            prompt_path = os.path.join(source_dir, "edit_prompt", f"{base_name}.txt")
-            
-            # Read prompt
-            with open(prompt_path, 'r', encoding='utf-8') as f:
-                edit_prompt = f.read().strip()
-            
-            dataset_dict["input_image"].append(input_img_path)
-            dataset_dict["edited_image"].append(edited_img_path)
-            dataset_dict["edit_prompt"].append(edit_prompt)
-        
-        # Create dataset and cast image columns
-        dataset = Dataset.from_dict(dataset_dict)
-        dataset = dataset.cast_column("input_image", Image())
-        dataset = dataset.cast_column("edited_image", Image())
-        
-        return dataset
 
-
-    if args.dataset_name is not None:
-        # Downloading and loading a dataset from the hub.
-        dataset = load_dataset(
-            args.dataset_name,
-            args.dataset_config_name,
-            cache_dir=args.cache_dir,
-        )
-    else:
-        data_files = {}
-        if args.train_data_dir is not None:
-            data_files["train"] = os.path.join(args.train_data_dir, "**")
-        try:
-           dataset = {"train": load_image_dataset(args.train_data_dir)}
-        except Exception as e:
-            print("Error loading dataset:", e)
-            raise
-        # See more about loading custom images at
-        # https://huggingface.co/docs/datasets/main/en/image_load#imagefolder
-
-    # Preprocessing the datasets.
-    # We need to tokenize inputs and targets.
-    column_names = dataset["train"].column_names
-    print("-----------column_names---------", column_names)
-
-    # 6. Get the column names for input/target.
-    dataset_columns = DATASET_NAME_MAPPING.get(args.dataset_name, None)
-    if args.original_image_column is None:
-        original_image_column = dataset_columns[0] if dataset_columns is not None else column_names[0]
-    else:
-        original_image_column = args.original_image_column
-        if original_image_column not in column_names:
-            raise ValueError(
-                f"--original_image_column' value '{args.original_image_column}' needs to be one of: {', '.join(column_names)}"
-            )
-    if args.edit_prompt_column is None:
-        edit_prompt_column = dataset_columns[1] if dataset_columns is not None else column_names[1]
-    else:
-        edit_prompt_column = args.edit_prompt_column
-        if edit_prompt_column not in column_names:
-            raise ValueError(
-                f"--edit_prompt_column' value '{args.edit_prompt_column}' needs to be one of: {', '.join(column_names)}"
-            )
-    if args.edited_image_column is None:
-        edited_image_column = dataset_columns[2] if dataset_columns is not None else column_names[2]
-    else:
-        edited_image_column = args.edited_image_column
-        if edited_image_column not in column_names:
-            raise ValueError(
-                f"--edited_image_column' value '{args.edited_image_column}' needs to be one of: {', '.join(column_names)}"
-            )
-
-    # Preprocessing the datasets.
-    # We need to tokenize input captions and transform the images.
-    def tokenize_captions(captions):
-        inputs = tokenizer(
-            captions, max_length=tokenizer.model_max_length, padding="max_length", truncation=True, return_tensors="pt"
-        )
-        return inputs.input_ids
-
-    # Preprocessing the datasets.
     train_transforms = transforms.Compose(
         [
+            transforms.Resize(args.resolution, interpolation=transforms.InterpolationMode.BILINEAR),
             transforms.CenterCrop(args.resolution) if args.center_crop else transforms.RandomCrop(args.resolution),
             transforms.RandomHorizontalFlip() if args.random_flip else transforms.Lambda(lambda x: x),
+            # Add random rotation of +90 or -90 degrees for 10% of images
+            transforms.Lambda(lambda x: transforms.functional.rotate(x, 90 * (2 * torch.randint(0, 2, (1,)).item() - 1)) 
+                             if torch.rand(1).item() < 0.1 else x),
         ]
     )
+    if args.train_data_dir is None:
+        raise ValueError("--train_data_dir must be specified to point to the LMDB database.")
+    if args.dataset_name is not None:
+        logger.warning("--dataset_name is ignored when --train_data_dir is provided for LMDB loading.")
 
-    def preprocess_images(examples):
-        original_images = np.concatenate(
-            [convert_to_np(image, args.resolution) for image in examples[original_image_column]]
+    # Define the transformations that will be applied within the LMDB dataset's __getitem__
+    # Ensure image augmentations are defined (should be around line 793 in original script)
+    # train_transforms = transforms.Compose([...]) # Make sure this is defined before this point
+
+    # Define the transform function to be passed to LMDBImagePromptDataset
+    def lmdb_transform(sample):
+        """
+        Applies transformations to a single sample dict loaded from LMDB.
+        Ensures consistent random transformations for image pairs and converts to tensor.
+        """
+        input_pil = sample['input_image']
+        edited_pil = sample['edited_image']
+        prompt = sample['edit_prompt']
+
+        # 1. Define ToTensor & Normalize (Must match model expectations, usually [-1, 1])
+        image_tensor_transforms = transforms.Compose(
+            [
+                transforms.ToTensor(), # Converts PIL [0, 255] to Tensor [0.0, 1.0]
+                transforms.Normalize([0.5], [0.5]) # Normalizes Tensor [0.0, 1.0] to [-1.0, 1.0]
+            ]
         )
-        edited_images = np.concatenate(
-            [convert_to_np(image, args.resolution) for image in examples[edited_image_column]]
-        )
-        # We need to ensure that the original and the edited images undergo the same
-        # augmentation transforms.
-        images = np.concatenate([original_images, edited_images])
-        images = torch.tensor(images)
-        images = 2 * (images / 255) - 1
-        return train_transforms(images)
 
-    def preprocess_train(examples):
-        # Preprocess images.
-        preprocessed_images = preprocess_images(examples)
-        # Since the original and edited images were concatenated before
-        # applying the transformations, we need to separate them and reshape
-        # them accordingly.
-        original_images, edited_images = preprocessed_images.chunk(2)
-        original_images = original_images.reshape(-1, 3, args.resolution, args.resolution)
-        edited_images = edited_images.reshape(-1, 3, args.resolution, args.resolution)
+        # 2. Apply SAME random geometric transforms (crop, flip, rotate) to both images
+        seed = random.randint(0, 2**32 - 1) # Generate a seed for this pair
 
-        # Collate the preprocessed images into the `examples`.
-        examples["original_pixel_values"] = original_images
-        examples["edited_pixel_values"] = edited_images
+        # Apply geometric transforms to input image
+        torch.manual_seed(seed)
+        random.seed(seed)
+        input_pil_augmented = train_transforms(input_pil) # Output is still PIL
 
-        # Preprocess the captions.
-        captions = list(examples[edit_prompt_column])
-        examples["input_ids"] = tokenize_captions(captions)
-        return examples
+        # Apply geometric transforms to edited image
+        torch.manual_seed(seed)
+        random.seed(seed)
+        edited_pil_augmented = train_transforms(edited_pil) # Output is still PIL
 
-    with accelerator.main_process_first():
-        if args.max_train_samples is not None:
-            dataset["train"] = dataset["train"].shuffle(seed=args.seed).select(range(args.max_train_samples))
-        # Set the training transforms
-        train_dataset = dataset["train"].with_transform(preprocess_train)
+        # 3. Convert augmented PIL images to Tensors and Normalize
+        original_pixel_values = image_tensor_transforms(input_pil_augmented)
+        edited_pixel_values = image_tensor_transforms(edited_pil_augmented)
+
+        # 4. Tokenize the prompt
+        input_ids = tokenize_captions([prompt])[0] # Tokenize single prompt, get first element
+
+        return {
+            "original_pixel_values": original_pixel_values, # Now a Tensor
+            "edited_pixel_values": edited_pixel_values,   # Now a Tensor
+            "input_ids": input_ids,
+        }
+
+    logger.info(f"Loading dataset using LMDBImagePromptDataset from: {args.train_data_dir}")
+    # Instantiate the LMDB dataset
+    try:
+        train_dataset = LMDBImagePromptDataset(lmdb_path=args.train_data_dir, transform=lmdb_transform)
+    except Exception as e:
+        logger.error(f"Failed to initialize LMDB dataset at {args.train_data_dir}: {e}", exc_info=True)
+        raise
+
+    # Handle max_train_samples (if provided) - Requires Subset
+    if args.max_train_samples is not None:
+        if args.max_train_samples < len(train_dataset):
+            logger.info(f"Truncating LMDB dataset to {args.max_train_samples} samples.")
+            from torch.utils.data import Subset
+            # Ensure reproducibility if shuffling before selecting
+            # indices = list(range(len(train_dataset)))
+            # random.Random(args.seed).shuffle(indices) # Use fixed seed if you shuffle
+            # train_dataset = Subset(train_dataset, indices[:args.max_train_samples])
+            # Or simply take the first N samples:
+            train_dataset = Subset(train_dataset, list(range(args.max_train_samples)))
+        else:
+             logger.info(f"max_train_samples ({args.max_train_samples}) >= dataset size ({len(train_dataset)}), using full dataset.")
 
     def collate_fn(examples):
         original_pixel_values = torch.stack([example["original_pixel_values"] for example in examples])
@@ -843,7 +966,7 @@ def main():
             "input_ids": input_ids,
         }
 
-    # DataLoaders creation:
+    # DataLoader:
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
         shuffle=True,
@@ -872,8 +995,8 @@ def main():
     )
 
     # Prepare everything with our `accelerator`.
-    unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-        unet, optimizer, train_dataloader, lr_scheduler
+    unet, optimizer, train_dataloader, lr_scheduler, fidelity_mlp = accelerator.prepare(
+        unet, optimizer, train_dataloader, lr_scheduler, fidelity_mlp
     )
 
     if args.use_ema:
@@ -887,11 +1010,9 @@ def main():
     elif accelerator.mixed_precision == "bf16":
         weight_dtype = torch.bfloat16
 
-    # Move text_encode and vae to gpu and cast to weight_dtype
-    text_encoder.to(accelerator.device, dtype=weight_dtype)
+    text_encoder.to(accelerator.device, dtype=torch.float32)
     vae.to(accelerator.device, dtype=weight_dtype)
 
-    # We need to recalculate our total training steps as the size of the training dataloader may have changed.
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
@@ -901,11 +1022,8 @@ def main():
                 f"the expected length ({len_train_dataloader_after_sharding}) when the learning rate scheduler was created. "
                 f"This inconsistency may result in the learning rate scheduler not functioning properly."
             )
-    # Afterwards we recalculate our number of training epochs
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
-    # We need to initialize the trackers we use, and also store our configuration.
-    # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
         accelerator.init_trackers("instruct-pix2pix", config=vars(args))
 
@@ -953,6 +1071,7 @@ def main():
 
     for epoch in range(first_epoch, args.num_train_epochs):
         unet.train()
+        # text_encoder.train()  # Ensure text encoder is in training mode
         train_loss = 0.0
         for step, batch in enumerate(train_dataloader):
             # Skip steps until we reach the resumed step
@@ -987,9 +1106,35 @@ def main():
                 # Get the additional image embedding for conditioning.
                 # Instead of getting a diagonal Gaussian here, we simply take the mode.
                 original_image_embeds = vae.encode(batch["original_pixel_values"].to(weight_dtype)).latent_dist.mode()
+                
+                fidelity_values = []
+                prompts_text = tokenizer.batch_decode(batch["input_ids"], skip_special_tokens=True)
+                for prompt_text in prompts_text:
+                    import re # Make sure re is imported
+                    match = re.search(r"f\s*=?\s*(\d+)|f(\d+)", prompt_text, re.IGNORECASE)
+                    if match:
+                        f_int = int(match.group(1) if match.group(1) else match.group(2))
+                        f_int = max(0, min(f_int, 9)) 
+                        fidelity_val = f_int / 9.0
+                    else:
+                        logger.warning(f"Could not parse f-value from prompt: '{prompt_text}'. Defaulting to f5 (normalized 0.5).")
+                        f_int = 5
+                        fidelity_val = 5.0 / 9.0
+                    fidelity_values.append(fidelity_val)
 
-                # Conditioning dropout to support classifier-free guidance during inference. For more details
-                # check out the section 3.2.1 of the original paper https://arxiv.org/abs/2211.09800.
+                fidelity_tensor = torch.tensor(fidelity_values, device=latents.device, dtype=latents.dtype).unsqueeze(-1) # Shape [B, 1]
+                try:
+                    fidelity_mlp_module = accelerator.unwrap_model(fidelity_mlp)
+                except:
+                    fidelity_mlp_module = fidelity_mlp
+                    print("the fidelity_mlp_module is", fidelity_mlp_module)
+                fidelity_embedding = fidelity_mlp_module(fidelity_tensor)
+                injection_scale = args.fidelity_weight
+                encoder_hidden_states[:, 0:1, :] = encoder_hidden_states[:, 0:1, :] + injection_scale * fidelity_embedding.unsqueeze(1)
+                
+                fidelity_tensor = fidelity_tensor.squeeze(-1) # Back to shape [B] for loss fn
+                
+#--------CONDITIONING DROPOUT TO SUPPORT CLASSIFIER-FREE GUIDANCE DURING INFERENCE.-------#
                 if args.conditioning_dropout_prob is not None:
                     random_p = torch.rand(bsz, device=latents.device, generator=generator)
                     # Sample masks for the edit prompts.
@@ -1023,18 +1168,82 @@ def main():
                 # Predict the noise residual and compute loss
                 model_pred = unet(concatenated_noisy_latents, timesteps, encoder_hidden_states, return_dict=False)[0]
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+                if accelerator.is_main_process and global_step % 100 == 0:
+                    logger.info(f"Step {global_step}: Fidelity embedding stats: mean={fidelity_embedding.mean().item():.4f}, std={fidelity_embedding.std().item():.4f}")
+            
+                
+                fidelity_loss = torch.tensor(0.0, device=loss.device)
+
+#---------COMPUTE FIDELITY LOSS---------#
+                if args.no_proxy:
+                    if global_step % 10 == 0:
+                        # We need to detach the model prediction to avoid double backprop
+                        with torch.no_grad():
+                            # Get the current predicted image (at this noise level)
+                            pred_latents = noise_scheduler.step(
+                                model_pred.detach(), timesteps[0], noisy_latents, return_dict=False
+                            )[0]
+                            
+                            # Convert to the same dtype as the VAE
+                            pred_latents = pred_latents.to(dtype=weight_dtype)
+                            
+                            # Decode to pixel space
+                            pred_images = vae.decode(pred_latents / vae.config.scaling_factor, return_dict=False)[0]
+                            
+                            # Also ensure input_images and target_images are in the right format
+                            input_images = batch["original_pixel_values"].to(device=pred_images.device, dtype=pred_images.dtype)
+                            target_images = batch["edited_pixel_values"].to(device=pred_images.device, dtype=pred_images.dtype)
+                            
+                            global lpips_loss_fn # Use global or pass from main()
+                            if args.fidelity_loss_type == 'lpips' and lpips_loss_fn is None:
+                                logger.info("Initializing LPIPS model...")
+                                lpips_loss_fn = lpips.LPIPS(net='vgg').to(accelerator.device)
+                                lpips_loss_fn.eval()
+                            
+                            # Compute fidelity loss
+                            fidelity_loss = compute_fidelity_loss(
+                                pred_images=pred_images,
+                                input_images=input_images,
+                                target_images=target_images,
+                                fidelity_values=fidelity_tensor,
+                                loss_type=args.fidelity_loss_type,
+                                lpips_model=lpips_loss_fn if args.fidelity_loss_type == 'lpips' else None,
+                                device=accelerator.device
+                            )
+                            
+                            # Log the losses
+                            if accelerator.is_main_process and global_step % 100 == 0:
+                                logger.info(f"Step {global_step}: Sample extracted fidelity values: {fidelity_values[:4]}")
+                                logger.info(f"Step {global_step}: Fidelity tensor for loss: {fidelity_tensor[:4]}")
+                else:
+                    fidelity_scale = fidelity_tensor.view(-1, 1, 1, 1)
+                    fidelity_loss = torch.mean(torch.abs(model_pred) * fidelity_scale)
+                    if accelerator.is_main_process and global_step % 100 == 0:
+                        logger.info(f"Step {global_step}: Using PROXY fidelity loss: {fidelity_loss.item():.4f}")
+
+                # Scale the fidelity loss - start with a small weight and increase over time
+                fidelity_weight = min(args.fidelity_weight, args.fidelity_weight * (global_step / 200))  # Gradually increase from 0.01 to 0.1
+                
+                if accelerator.is_main_process and global_step % 100 == 0:
+                    main_loss_val = F.mse_loss(model_pred.float(), target.float(), reduction="mean").item()
+                    fidelity_comp_val = (fidelity_loss * fidelity_weight).item()
+                    logger.info(f"Step {global_step}: Main Loss: {main_loss_val:.6f}, Weighted Fidelity Comp: {fidelity_comp_val:.6f}")
+
+                # Add to the main loss - use the simple proxy for training
+                loss = loss + fidelity_weight * fidelity_loss
 
                 # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
                 train_loss += avg_loss.item() / args.gradient_accumulation_steps
 
-                # Backpropagate
+                # Backpropagation
                 accelerator.backward(loss)
+                
                 if accelerator.sync_gradients:
                     accelerator.clip_grad_norm_(unet.parameters(), args.max_grad_norm)
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
+                    optimizer.step()
+                    optimizer.zero_grad()
+                    lr_scheduler.step()
 
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
@@ -1045,39 +1254,40 @@ def main():
                 accelerator.log({"train_loss": train_loss}, step=global_step)
                 train_loss = 0.0
                 
-                if global_step % args.checkpointing_steps == 0:
-                    if accelerator.is_main_process:
+                if accelerator.is_main_process:
+                    if args.checkpointing_steps is not None and args.checkpointing_steps > 0 and global_step % args.checkpointing_steps == 0:
                         save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                         accelerator.save_state(save_path)
                         logger.info(f"Saved state to {save_path}")
 
-                        # Cleanup old checkpoints if needed
+                        # Optionally clean up old checkpoints
                         if args.checkpoints_total_limit is not None:
-                            checkpoints = [d for d in os.listdir(args.output_dir) if d.startswith("checkpoint")]
-                            checkpoints = sorted(checkpoints, key=lambda x: int(x.split("-")[1]))
-                            
-                            # Remove old checkpoints if limit is exceeded
+                            checkpoints = os.path.join(args.output_dir, "checkpoint-*")
+                            checkpoints = sorted(glob.glob(checkpoints), key=lambda x: int(x.split("-")[-1]))
                             if len(checkpoints) > args.checkpoints_total_limit:
                                 num_to_remove = len(checkpoints) - args.checkpoints_total_limit
                                 removing_checkpoints = checkpoints[0:num_to_remove]
-                                
-                                logger.info(f"Removing old checkpoints: {', '.join(removing_checkpoints)}")
-                                for d in removing_checkpoints:
-                                    shutil.rmtree(os.path.join(args.output_dir, d))
+                                logger.info(
+                                    f"Removing old checkpoints: {', '.join(removing_checkpoints)}"
+                                )
+                                for removing_checkpoint in removing_checkpoints:
+                                    shutil.rmtree(removing_checkpoint)
 
-                # Move validation check here, right after global_step is incremented
+#---------VALIDATION---------#
                 if accelerator.is_main_process:
                     if args.val_images_dir is not None and (
-                        (global_step == 600) or  # First validation early in training
-                        (global_step == 1200) or  # First validation early in training
-                        (args.validation_steps > 0 and global_step % args.validation_steps == 0) or  # Regular validation during training
-                        (global_step >= args.max_train_steps)  # Final validation
+                        (global_step == 100) or
+                        (global_step == 600) or
+                        (global_step == 1500) or
+                        (args.validation_steps > 0 and global_step % args.validation_steps == 0) or
+                        (global_step >= args.max_train_steps)
                     ):
                         logger.info(f"Running validation at step {global_step}")
                         if args.use_ema:
                             ema_unet.store(unet.parameters())
                             ema_unet.copy_to(unet.parameters())
                             
+                        # Create the pipeline with the correct fidelity_mlp
                         pipeline = StableDiffusionInstructPix2PixPipeline.from_pretrained(
                             args.pretrained_model_name_or_path,
                             unet=unwrap_model(unet),
@@ -1087,8 +1297,11 @@ def main():
                             variant=args.variant,
                             torch_dtype=weight_dtype,
                         )
-                        accelerator.step = global_step  # Add this line before calling log_validation
-
+                        # Directly attach the unwrapped fidelity_mlp
+                        pipeline.fidelity_mlp = accelerator.unwrap_model(fidelity_mlp)
+                        
+                        accelerator.step = global_step
+                        
                         log_validation(
                             pipeline,
                             args,
@@ -1128,6 +1341,8 @@ def main():
                     variant=args.variant,
                     torch_dtype=weight_dtype,
                 )
+                # Directly attach the unwrapped fidelity_mlp to the pipeline
+                pipeline.fidelity_mlp = accelerator.unwrap_model(fidelity_mlp)
 
                 log_validation(
                     pipeline,
@@ -1148,21 +1363,35 @@ def main():
         if args.use_ema:
             ema_unet.copy_to(unet.parameters())
 
+        unet = unwrap_model(unet)
+        text_encoder = unwrap_model(text_encoder)
+
+        # Save the trained models
+        unet.save_pretrained(os.path.join(args.output_dir, "unet"))
+        text_encoder.save_pretrained(os.path.join(args.output_dir, "text_encoder"))
+
+        # Save the pipeline
         pipeline = StableDiffusionInstructPix2PixPipeline.from_pretrained(
             args.pretrained_model_name_or_path,
-            text_encoder=unwrap_model(text_encoder),
-            vae=unwrap_model(vae),
-            unet=unwrap_model(unet),
+            unet=accelerator.unwrap_model(unet),
+            text_encoder=text_encoder,
             revision=args.revision,
             variant=args.variant,
+            torch_dtype=weight_dtype,
         )
+        # attach the unwrapped fidelity_mlp to the pipeline to log_validation correctly
+        pipeline.fidelity_mlp = accelerator.unwrap_model(fidelity_mlp)
         pipeline.save_pretrained(args.output_dir)
+        
+        accelerator.unwrap_model(fidelity_mlp).save_pretrained(
+            os.path.join(args.output_dir, "fidelity_mlp")
+        )
 
         if args.push_to_hub:
             upload_folder(
                 repo_id=repo_id,
                 folder_path=args.output_dir,
-                commit_message="End of training",
+                commit_message=f"End of training, step: {global_step}",
                 ignore_patterns=["step_*", "epoch_*"],
             )
 
@@ -1173,7 +1402,101 @@ def main():
                 accelerator,
                 generator,
             )
+
+        # At the end of training, save the fidelity_mlp
+        if args.fidelity_mlp_path:
+            if accelerator.is_main_process:
+                # Get the fidelity_mlp from the unwrapped model
+                unwrapped_fidelity_mlp = accelerator.unwrap_model(fidelity_mlp)
+                unwrapped_fidelity_mlp.save_pretrained(args.fidelity_mlp_path)
+                logger.info(f"Saved FidelityMLP to {args.fidelity_mlp_path}")
+
+    # Too noisy to be helpful
+    if global_step % args.validation_steps == 0:
+        test_fidelities = [0.1, 0.5, 0.9]  # Low, medium, high
+        with torch.no_grad():
+            for f_val in test_fidelities:
+                test_tensor = torch.tensor([[f_val]], device=accelerator.device)
+                output = fidelity_mlp(test_tensor)
+                logger.info(f"Fidelity {f_val} produces embedding with mean: {output.mean().item()}, std: {output.std().item()}")
+
     accelerator.end_training()
+
+
+def compute_fidelity_loss(
+    pred_images: torch.Tensor,
+    input_images: torch.Tensor,
+    target_images: torch.Tensor,
+    fidelity_values: torch.Tensor,
+    loss_type: str = "l1",
+    lpips_model: Optional[nn.Module] = None,
+    device: torch.device = torch.device("cpu") # Pass the device
+) -> torch.Tensor:
+    """
+    Compute a fidelity-weighted loss balancing input preservation and edit strength.
+
+    Args:
+        pred_images: Predicted images from the model [B, C, H, W], range [-1, 1] or [0, 1].
+        input_images: Original input images [B, C, H, W], range [-1, 1] or [0, 1].
+        target_images: Target edited images [B, C, H, W], range [-1, 1] or [0, 1].
+        fidelity_values: Batch of fidelity control values (normalized to [0, 1]). [B]
+        loss_type: Type of loss ('l1', 'ssim', 'lpips').
+        lpips_model: Initialized LPIPS model (required if loss_type is 'lpips').
+        device: The torch device to run calculations on.
+
+    Returns:
+        A loss tensor.
+    """
+    # Ensure images are on the correct device and float32
+    pred_images = pred_images.to(device=device, dtype=torch.float32)
+    input_images = input_images.to(device=device, dtype=torch.float32)
+    target_images = target_images.to(device=device, dtype=torch.float32)
+    fidelity_values = fidelity_values.to(device=device, dtype=torch.float32).view(-1) # Ensure shape [B]
+
+    batch_size = pred_images.shape[0]
+    dist_to_input = torch.zeros(batch_size, device=device)
+    dist_to_target = torch.zeros(batch_size, device=device)
+
+    if loss_type == "l1":
+        # L1 Loss (Absolute Difference)
+        dist_to_input = torch.abs(pred_images - input_images).mean(dim=[1, 2, 3])
+        dist_to_target = torch.abs(pred_images - target_images).mean(dim=[1, 2, 3])
+
+    elif loss_type == "ssim":
+        # SSIM Loss: ssim function returns similarity (higher is better), so loss is 1 - ssim
+        # Ensure images are in [0, 1] range for SSIM if they are not already
+        pred_images_01 = (pred_images + 1) / 2 if pred_images.min() < 0 else pred_images
+        input_images_01 = (input_images + 1) / 2 if input_images.min() < 0 else input_images
+        target_images_01 = (target_images + 1) / 2 if target_images.min() < 0 else target_images
+
+        # Calculate SSIM per image in the batch
+        for i in range(batch_size):
+             # data_range is 1.0 since images are normalized to [0, 1]
+            dist_to_input[i] = 1.0 - ssim(pred_images_01[i].unsqueeze(0), input_images_01[i].unsqueeze(0), data_range=1.0, size_average=True)
+            dist_to_target[i] = 1.0 - ssim(pred_images_01[i].unsqueeze(0), target_images_01[i].unsqueeze(0), data_range=1.0, size_average=True)
+
+    elif loss_type == "lpips":
+        # LPIPS Loss: Measures perceptual distance (lower is better)
+        if lpips_model is None:
+            raise ValueError("lpips_model must be provided for loss_type 'lpips'")
+        print("the device is", device)
+        # LPIPS expects input range [-1, 1]
+        pred_images_norm = pred_images if pred_images.min() >= -1 else (pred_images * 2) - 1
+        input_images_norm = input_images if input_images.min() >= -1 else (input_images * 2) - 1
+        target_images_norm = target_images if target_images.min() >= -1 else (target_images * 2) - 1
+
+        dist_to_input = lpips_model(pred_images_norm, input_images_norm).squeeze()
+        dist_to_target = lpips_model(pred_images_norm, target_images_norm).squeeze()
+
+    else:
+        raise ValueError(f"Unknown loss_type: {loss_type}")
+
+    # Weighted combination based on fidelity:
+    # High fidelity (close to 1) -> emphasize distance to input
+    # Low fidelity (close to 0) -> emphasize distance to target
+    weighted_loss = (fidelity_values * dist_to_input) + ((1 - fidelity_values) * dist_to_target)
+
+    return weighted_loss.mean()
 
 
 if __name__ == "__main__":

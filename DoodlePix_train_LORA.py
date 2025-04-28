@@ -14,7 +14,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Script to fine-tune Stable Diffusion for InstructPix2Pix."""
+"""
+    Script to fine-tune Stable Diffusion for LORA InstructPix2Pix.
+    Base code referred from: https://github.com/huggingface/diffusers/blob/main/examples/instruct_pix2pix/train_instruct_pix2pix.py
+"""
 
 import argparse
 import logging
@@ -23,7 +26,9 @@ import os
 import shutil
 from contextlib import nullcontext
 from pathlib import Path
-
+import json
+import PIL.Image
+import PIL.ImageOps
 import accelerate
 import datasets
 import numpy as np
@@ -40,25 +45,32 @@ from accelerate.utils import ProjectConfiguration, set_seed
 from datasets import load_dataset
 from huggingface_hub import create_repo, upload_folder
 from packaging import version
+from peft import LoraConfig
+from peft.utils import get_peft_model_state_dict
 from torchvision import transforms
 from tqdm.auto import tqdm
 from transformers import CLIPTextModel, CLIPTokenizer
-
+from typing import Optional
 import diffusers
 from diffusers import AutoencoderKL, DDPMScheduler, StableDiffusionInstructPix2PixPipeline, UNet2DConditionModel
 from diffusers.optimization import get_scheduler
-from diffusers.training_utils import EMAModel
-from diffusers.utils import check_min_version, deprecate, is_wandb_available
+from diffusers.training_utils import EMAModel, cast_training_params
+from diffusers.utils import check_min_version, convert_state_dict_to_diffusers, deprecate, is_wandb_available
+from diffusers.utils.hub_utils import load_or_create_model_card, populate_model_card
 from diffusers.utils.import_utils import is_xformers_available
 from diffusers.utils.torch_utils import is_compiled_module
-from datasets import Dataset, Image
-from PIL import Image as PILImage
 
+# Import the FidelityMLP
+from fidelity_mlp import FidelityMLP
+from pytorch_msssim import ssim
+import lpips
+import re
 if is_wandb_available():
     import wandb
 
+
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
-check_min_version("0.33.0.dev0")
+check_min_version("0.32.0.dev0")
 
 logger = get_logger(__name__, log_level="INFO")
 
@@ -73,62 +85,142 @@ def log_validation(
     args,
     accelerator,
     generator,
+    fidelity_mlp=None,
 ):
-    logger.info(
-        f"Running validation... \n Generating {args.num_validation_images} images with prompt:"
-        f" {args.validation_prompt}."
-    )
-    
-    # Create validation directory
-    validation_dir = os.path.join(args.output_dir, "validation")
-    os.makedirs(validation_dir, exist_ok=True)
-    
-    pipeline = pipeline.to(accelerator.device)
-    pipeline.set_progress_bar_config(disable=True)
+    try:
+        logger.info("Running validation...")
+        
+        validation_dir = os.path.join(args.output_dir, "validation")
+        current_step = accelerator.step
+        step_dir = os.path.join(validation_dir, f"step_{current_step}")
+        os.makedirs(step_dir, exist_ok=True)
+        
+        pipeline = pipeline.to(accelerator.device)
+        pipeline.set_progress_bar_config(disable=True)
+        
+        # Get all validation images and their corresponding prompts
+        val_images_dir = args.val_images_dir
+        try:
+            image_files = [f for f in os.listdir(val_images_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
+        except (FileNotFoundError, OSError) as e:
+            logger.error(f"Error accessing validation directory: {e}")
+            return
+        
+        logger.info(f"Found {len(image_files)} validation images")
+        
+        edited_images_dict = {}
+        if torch.backends.mps.is_available():
+            autocast_ctx = nullcontext()
+        else:
+            autocast_ctx = torch.autocast(accelerator.device.type)
 
-    # Load original image
-    original_image = PILImage.open(args.val_image_url)
-    
-    # Save original image
-    original_image.save(os.path.join(validation_dir, "original.png"))
-    
-    edited_images = []
-    if torch.backends.mps.is_available():
-        autocast_ctx = nullcontext()
-    else:
-        autocast_ctx = torch.autocast(accelerator.device.type)
+        fidelity_levels = [2, 8]  # Low, high fidelity
+        
+        with autocast_ctx:
+            for image_file in image_files:
+                try:
+                    base_name = os.path.splitext(image_file)[0]
+                    image_path = os.path.join(val_images_dir, image_file)
+                    prompt_path = os.path.join(val_images_dir, f"{base_name}.txt")
+                    
+                    if not os.path.exists(prompt_path):
+                        logger.warning(f"Skipping {image_file} - no corresponding prompt file found")
+                        continue
+                        
+                    with open(prompt_path, 'r', encoding='utf-8') as f:
+                        validation_prompt = f.read().strip()
+                        
+                    original_image = PIL.Image.open(image_path).convert("RGB")
+                    
+                    try:
+                        original_image.save(os.path.join(step_dir, f"original_{base_name}.png"))
+                    except Exception as e:
+                        logger.error(f"Failed to save original image {base_name}: {e}")
+                        continue
 
-    with autocast_ctx:
-        for idx in range(args.num_validation_images):
-            edited_image = pipeline(
-                args.validation_prompt,
-                negative_prompt="NSFW, nudity, bad, blurry, sex, photorealistic",
-                image=original_image,
-                num_inference_steps=24,
-                image_guidance_scale=1.5,
-                guidance_scale=6.0,
-                generator=generator,
-            ).images[0]
+                    edited_images = []
+                    for fidelity in fidelity_levels:
+                        generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
+                        fidelity_prompt = f"f{fidelity} {validation_prompt}"
+                        
+                        try:
+                            edited_image = pipeline(
+                                fidelity_prompt,
+                                negative_prompt="NSFW, nudity, bad, blurry, sex",
+                                image=original_image,
+                                num_inference_steps=24,
+                                image_guidance_scale=1.5,
+                                guidance_scale=6.0,
+                                generator=generator,
+                                safety_checker=None
+                            ).images[0]
+                            
+                            edited_image.save(os.path.join(step_dir, f"edited_{base_name}_f{fidelity}.png"))
+                            edited_images.append(edited_image)
+                            
+                            with open(os.path.join(step_dir, f"prompt_{base_name}_f{fidelity}.txt"), "w") as f:
+                                f.write(fidelity_prompt)
+                                
+                        except Exception as e:
+                            logger.error(f"Failed to generate/save edited image {base_name} with fidelity {fidelity}: {e}")
+                            continue
+                    
+                    if edited_images:
+                        edited_images_dict[base_name] = {
+                            "original": original_image,
+                            "edited": edited_images,
+                            "prompt": validation_prompt
+                        }
+                        
+                except Exception as e:
+                    logger.error(f"Failed to process validation image {image_file}: {e}")
+                    continue
+
+        try:
+            for tracker in accelerator.trackers:
+                if tracker.name == "wandb":
+                    wandb_table = wandb.Table(columns=WANDB_TABLE_COL_NAMES + ["Fidelity"])
+                    for base_name, data in edited_images_dict.items():
+                        for i, edited_image in enumerate(data["edited"]):
+                            fidelity = fidelity_levels[i % len(fidelity_levels)]
+                            wandb_table.add_data(
+                                wandb.Image(data["original"]),
+                                wandb.Image(edited_image),
+                                data["prompt"],
+                                f"f{fidelity}"
+                            )
+                    tracker.log({"validation": wandb_table})
+        except Exception as e:
+            logger.error(f"Failed to log to wandb: {e}")
             
-            # Save each edited image
-            edited_image.save(os.path.join(validation_dir, f"edited_{idx}.png"))
-            edited_images.append(edited_image)
-            
-            # Save prompt in a text file
-            with open(os.path.join(validation_dir, f"prompt_{idx}.txt"), "w") as f:
-                f.write(args.validation_prompt)
-
-    # Still log to wandb if it's enabled
-    for tracker in accelerator.trackers:
-        if tracker.name == "wandb":
-            wandb_table = wandb.Table(columns=WANDB_TABLE_COL_NAMES)
-            for edited_image in edited_images:
-                wandb_table.add_data(wandb.Image(original_image), wandb.Image(edited_image), args.validation_prompt)
-            tracker.log({"validation": wandb_table})
+    except Exception as e:
+        logger.error(f"Validation failed with error: {e}")
+        logger.info("Continuing training despite validation failure")
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script for InstructPix2Pix.")
+    parser.add_argument(
+        "--no_proxy",
+        default=False,
+        action="store_true",
+        help=(
+            "Whether to use proxy loss for fidelity or actual fidelity loss"
+        ),
+    )
+    parser.add_argument(
+        "--fidelity_weight",
+        type=float,
+        default=0.1,
+        help="Weight for the fidelity loss.",
+    )
+    parser.add_argument(
+        "--fidelity_loss_type",
+        type=str,
+        default="l1",
+        choices=["l1", "ssim", "lpips"],
+        help="Type of loss for the full fidelity calculation ('l1', 'ssim', 'lpips'). Only used if --no_proxy is True.",
+    )
     parser.add_argument(
         "--pretrained_model_name_or_path",
         type=str,
@@ -142,6 +234,12 @@ def parse_args():
         default=None,
         required=False,
         help="Revision of pretrained model identifier from huggingface.co/models.",
+    )
+    parser.add_argument(
+        "--val_images_dir",
+        type=str,
+        default=None,
+        help="Directory containing validation images and their corresponding .txt prompt files",
     )
     parser.add_argument(
         "--variant",
@@ -196,16 +294,16 @@ def parse_args():
     parser.add_argument(
         "--val_image_url",
         type=str,
-        default="train/input_image/image00162.png",
+        default=None,
         help="URL to the original image that you would like to edit (used during inference for debugging purposes).",
     )
     parser.add_argument(
-        "--validation_prompt", type=str, default="<subject:rocket>, <style: 3D UI icon>, <colors:blue, silver, black background>, <theme:glass window metal frame>, <details:the icon is a rocket, set against a dark background>", help="A prompt that is sampled during training for inference."
+        "--validation_prompt", type=str, default=None, help="A prompt that is sampled during training for inference."
     )
     parser.add_argument(
         "--num_validation_images",
         type=int,
-        default=2,
+        default=4,
         help="Number of images that should be generated during validation with `validation_prompt`.",
     )
     parser.add_argument(
@@ -258,12 +356,18 @@ def parse_args():
         ),
     )
     parser.add_argument(
+        "--validation_steps",
+        type=int,
+        default=500,
+        help="Run validation every X steps. Set to -1 to disable during training and only run at the end.",
+    )
+    parser.add_argument(
         "--random_flip",
         action="store_true",
         help="whether to randomly flip images horizontally",
     )
     parser.add_argument(
-        "--train_batch_size", type=int, default=2, help="Batch size (per device) for the training dataloader."
+        "--train_batch_size", type=int, default=16, help="Batch size (per device) for the training dataloader."
     )
     parser.add_argument("--num_train_epochs", type=int, default=100)
     parser.add_argument(
@@ -413,6 +517,28 @@ def parse_args():
     parser.add_argument(
         "--enable_xformers_memory_efficient_attention", action="store_true", help="Whether or not to use xformers."
     )
+    parser.add_argument(
+        "--rank",
+        type=int,
+        default=4,
+        help=("The dimension of the LoRA update matrices."),
+    )
+    parser.add_argument(
+        "--use_fidelity_control", 
+        action="store_true",
+        help="Whether to use fidelity control through FidelityMLP",
+    )
+    parser.add_argument(
+        "--style_strength",
+        type=float,
+        default=0.7,
+        help="Strength of style transfer (0.0-1.0) - higher values preserve less of original content",
+    )
+    parser.add_argument(
+        "--save_optimizer_state",
+        action="store_true",
+        help="Whether to save optimizer state with checkpoints for resuming training",
+    )
 
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
@@ -435,15 +561,168 @@ def convert_to_np(image, resolution):
     return np.array(image).transpose(2, 0, 1)
 
 
-def download_image(url):
-    image = PIL.Image.open(requests.get(url, stream=True).raw)
-    image = PIL.ImageOps.exif_transpose(image)
-    image = image.convert("RGB")
-    return image
+
+def compute_fidelity_loss(
+    pred_images: torch.Tensor,
+    input_images: torch.Tensor,
+    target_images: torch.Tensor,
+    fidelity_values: torch.Tensor,
+    loss_type: str = "l1",
+    lpips_model: Optional[nn.Module] = None,
+    device: torch.device = torch.device("cpu") # Pass the device
+) -> torch.Tensor:
+    """
+    Compute a fidelity-weighted loss balancing input preservation and edit strength.
+
+    Args:
+        pred_images: Predicted images from the model [B, C, H, W], range [-1, 1] or [0, 1].
+        input_images: Original input images [B, C, H, W], range [-1, 1] or [0, 1].
+        target_images: Target edited images [B, C, H, W], range [-1, 1] or [0, 1].
+        fidelity_values: Batch of fidelity control values (normalized to [0, 1]). [B]
+        loss_type: Type of loss ('l1', 'ssim', 'lpips').
+        lpips_model: Initialized LPIPS model (required if loss_type is 'lpips').
+        device: The torch device to run calculations on.
+
+    Returns:
+        A loss tensor.
+    """
+    # Ensure images are on the correct device and float32
+    pred_images = pred_images.to(device=device, dtype=torch.float32)
+    input_images = input_images.to(device=device, dtype=torch.float32)
+    target_images = target_images.to(device=device, dtype=torch.float32)
+    fidelity_values = fidelity_values.to(device=device, dtype=torch.float32).view(-1) # Ensure shape [B]
+
+    batch_size = pred_images.shape[0]
+    dist_to_input = torch.zeros(batch_size, device=device)
+    dist_to_target = torch.zeros(batch_size, device=device)
+
+    if loss_type == "l1":
+        # L1 Loss (Absolute Difference)
+        dist_to_input = torch.abs(pred_images - input_images).mean(dim=[1, 2, 3])
+        dist_to_target = torch.abs(pred_images - target_images).mean(dim=[1, 2, 3])
+
+    elif loss_type == "ssim":
+        # SSIM Loss: ssim function returns similarity (higher is better), so loss is 1 - ssim
+        # Ensure images are in [0, 1] range for SSIM if they are not already
+        pred_images_01 = (pred_images + 1) / 2 if pred_images.min() < 0 else pred_images
+        input_images_01 = (input_images + 1) / 2 if input_images.min() < 0 else input_images
+        target_images_01 = (target_images + 1) / 2 if target_images.min() < 0 else target_images
+
+        # Calculate SSIM per image in the batch
+        for i in range(batch_size):
+             # data_range is 1.0 since images are normalized to [0, 1]
+            dist_to_input[i] = 1.0 - ssim(pred_images_01[i].unsqueeze(0), input_images_01[i].unsqueeze(0), data_range=1.0, size_average=True)
+            dist_to_target[i] = 1.0 - ssim(pred_images_01[i].unsqueeze(0), target_images_01[i].unsqueeze(0), data_range=1.0, size_average=True)
+
+    elif loss_type == "lpips":
+        # LPIPS Loss: Measures perceptual distance (lower is better)
+        if lpips_model is None:
+            raise ValueError("lpips_model must be provided for loss_type 'lpips'")
+        print("the device is", device)
+        # LPIPS expects input range [-1, 1]
+        pred_images_norm = pred_images if pred_images.min() >= -1 else (pred_images * 2) - 1
+        input_images_norm = input_images if input_images.min() >= -1 else (input_images * 2) - 1
+        target_images_norm = target_images if target_images.min() >= -1 else (target_images * 2) - 1
+
+        dist_to_input = lpips_model(pred_images_norm, input_images_norm).squeeze()
+        dist_to_target = lpips_model(pred_images_norm, target_images_norm).squeeze()
+
+    else:
+        raise ValueError(f"Unknown loss_type: {loss_type}")
+
+    # Weighted combination based on fidelity:
+    # High fidelity (close to 1) -> emphasize distance to input
+    # Low fidelity (close to 0) -> emphasize distance to target
+    weighted_loss = (fidelity_values * dist_to_input) + ((1 - fidelity_values) * dist_to_target)
+
+    return weighted_loss.mean()
 
 
+
+
+def load_image_dataset(source_dir):
+    """
+    Load an image dataset from a directory structured like:
+    source_dir/
+        input_image/
+            image1.png
+            image2.png
+            ...
+        edited_image/
+            image1.png
+            image2.png
+            ...
+        edit_prompt/
+            image1.txt
+            image2.txt
+            ...
+    """
+    input_image_dir = os.path.join(source_dir, "input_image")
+    edited_image_dir = os.path.join(source_dir, "edited_image")
+    edit_prompt_dir = os.path.join(source_dir, "edit_prompt")
+    
+    # Verify directories exist
+    if not os.path.exists(input_image_dir):
+        raise ValueError(f"Input image directory {input_image_dir} does not exist")
+    if not os.path.exists(edited_image_dir):
+        raise ValueError(f"Edited image directory {edited_image_dir} does not exist")
+    if not os.path.exists(edit_prompt_dir):
+        raise ValueError(f"Edit prompt directory {edit_prompt_dir} does not exist")
+    
+    # Get image files
+    image_files = [f for f in os.listdir(input_image_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+    
+    # Create dataset
+    data = {
+        "input_image": [],
+        "edited_image": [],
+        "edit_prompt": []
+    }
+    
+    # For each image, check if corresponding edited image and prompt exists
+    for img_file in image_files:
+        # Prepare file names
+        edited_img_path = os.path.join(edited_image_dir, img_file)
+        
+        # Get base name without extension to find matching prompt file
+        base_name = os.path.splitext(img_file)[0]
+        prompt_file = f"{base_name}.txt"
+        prompt_path = os.path.join(edit_prompt_dir, prompt_file)
+        
+        # Check if both edited image and prompt file exist
+        if not os.path.exists(edited_img_path):
+            logger.warning(f"Missing edited version for {img_file}, skipping")
+            continue
+        
+        if not os.path.exists(prompt_path):
+            logger.warning(f"Missing prompt file for {img_file}, skipping")
+            continue
+        
+        # Read prompt from text file
+        try:
+            with open(prompt_path, 'r', encoding='utf-8') as f:
+                prompt = f.read().strip()
+        except Exception as e:
+            logger.warning(f"Error reading prompt file {prompt_path}: {e}, skipping")
+            continue
+        
+        # Add to dataset
+        data["input_image"].append(PIL.Image.open(os.path.join(input_image_dir, img_file)).convert("RGB"))
+        data["edited_image"].append(PIL.Image.open(edited_img_path).convert("RGB"))
+        data["edit_prompt"].append(prompt)
+    
+    if len(data["input_image"]) == 0:
+        raise ValueError(f"No valid image-prompt pairs found in {source_dir}")
+        
+    logger.info(f"Loaded {len(data['input_image'])} image-prompt pairs from {source_dir}")
+    
+    # Convert to dataset
+    return datasets.Dataset.from_dict(data)
+
+lpips_loss_fn = None
 def main():
     args = parse_args()
+
     if args.report_to == "wandb" and args.hub_token is not None:
         raise ValueError(
             "You cannot use both --report_to=wandb and --hub_token due to a security risk of exposing your token."
@@ -520,30 +799,86 @@ def main():
     )
 
     # InstructPix2Pix uses an additional image for conditioning. To accommodate that,
-    # it uses 8 channels (instead of 4) in the first (conv) layer of the UNet. This UNet is
-    # then fine-tuned on the custom InstructPix2Pix dataset. This modified UNet is initialized
-    # from the pre-trained checkpoints. For the extra channels added to the first layer, they are
-    # initialized to zero.
+    # it uses 8 channels (instead of 4) in the first (conv) layer of the UNet.
     logger.info("Initializing the InstructPix2Pix UNet from the pretrained UNet.")
     in_channels = 8
     out_channels = unet.conv_in.out_channels
     unet.register_to_config(in_channels=in_channels)
 
-    with torch.no_grad():
-        new_conv_in = nn.Conv2d(
-            in_channels, out_channels, unet.conv_in.kernel_size, unet.conv_in.stride, unet.conv_in.padding
-        )
-        new_conv_in.weight.zero_()
-        new_conv_in.weight[:, :4, :, :].copy_(unet.conv_in.weight)
-        unet.conv_in = new_conv_in
+    # Check if the UNet already has 8 input channels (already an InstructPix2Pix model)
+    if unet.conv_in.in_channels == 8:
+        logger.info("UNet already has 8 input channels, skipping channel expansion")
+    else:
+        # If not, initialize a new conv layer with 8 input channels
+        logger.info(f"Expanding UNet input channels from {unet.conv_in.in_channels} to 8")
+        with torch.no_grad():
+            new_conv_in = nn.Conv2d(
+                in_channels, out_channels, unet.conv_in.kernel_size, unet.conv_in.stride, unet.conv_in.padding
+            )
+            new_conv_in.weight.zero_()
+            new_conv_in.weight[:, :unet.conv_in.in_channels, :, :].copy_(unet.conv_in.weight)
+            unet.conv_in = new_conv_in
 
-    # Freeze vae and text_encoder
+    # Freeze vae, text_encoder and unet
     vae.requires_grad_(False)
     text_encoder.requires_grad_(False)
+    unet.requires_grad_(False)
+
+    # referred to https://github.com/huggingface/diffusers/blob/main/examples/text_to_image/train_text_to_image_lora.py
+    # For mixed precision training we cast all non-trainable weights (vae, non-lora text_encoder and non-lora unet) to half-precision
+    # as these weights are only used for inference, keeping weights in full precision is not required.
+    weight_dtype = torch.float32
+    if accelerator.mixed_precision == "fp16":
+        weight_dtype = torch.float16
+    elif accelerator.mixed_precision == "bf16":
+        weight_dtype = torch.bfloat16
+
+    # Freeze the unet parameters before adding adapters
+    unet.requires_grad_(False)
+
+    unet_lora_config = LoraConfig(
+        r=args.rank,
+        lora_alpha=args.rank,
+        init_lora_weights="gaussian",
+        target_modules=["to_k", "to_q", "to_v", "to_out.0", "proj_in", "proj_out", "conv_in", "conv_out"],
+    )
+
+    # Move unet, vae and text_encoder to device and cast to weight_dtype
+    unet.to(accelerator.device, dtype=weight_dtype)
+    vae.to(accelerator.device, dtype=weight_dtype)
+    text_encoder.to(accelerator.device, dtype=weight_dtype)
+
+    # Add adapter and make sure the trainable params are in float32.
+    unet.add_adapter(unet_lora_config)
+    if args.mixed_precision == "fp16":
+        # only upcast trainable parameters (LoRA) into fp32
+        cast_training_params(unet, dtype=torch.float32)
 
     # Create EMA for the unet.
     if args.use_ema:
         ema_unet = EMAModel(unet.parameters(), model_cls=UNet2DConditionModel, model_config=unet.config)
+        
+    fidelity_mlp = None
+    if args.use_fidelity_control: # Check if fidelity control is enabled via args
+        # Construct the potential path within the pretrained model directory
+        potential_mlp_path = os.path.join(args.pretrained_model_name_or_path, "fidelity_mlp")
+        
+        if os.path.exists(potential_mlp_path):
+            try:
+                logger.info(f"Loading existing FidelityMLP from {potential_mlp_path}")
+                fidelity_mlp = FidelityMLP.from_pretrained(potential_mlp_path)
+            except Exception as e:
+                logger.warning(f"Failed to load FidelityMLP from {potential_mlp_path}: {e}. Creating new one.")
+                # Fallback to creating a new one if loading fails
+                hidden_size = text_encoder.config.hidden_size # Use text encoder's hidden size
+                fidelity_mlp = FidelityMLP(hidden_size=hidden_size)
+        else:
+            logger.info("Creating new FidelityMLP.")
+            hidden_size = text_encoder.config.hidden_size # Use text encoder's hidden size
+            fidelity_mlp = FidelityMLP(hidden_size=hidden_size)
+            
+        # Move fidelity_mlp to device (important before adding to optimizer)
+        fidelity_mlp.to(accelerator.device, dtype=weight_dtype)
 
     if args.enable_xformers_memory_efficient_attention:
         if is_xformers_available():
@@ -557,6 +892,25 @@ def main():
             unet.enable_xformers_memory_efficient_attention()
         else:
             raise ValueError("xformers is not available. Make sure it is installed correctly")
+
+    # trainable_params = filter(lambda p: p.requires_grad, unet.parameters())
+    unet_lora_parameters = list(filter(lambda p: p.requires_grad, unet.parameters()))
+    
+    params_to_optimize = [
+        {"params": unet_lora_parameters, "lr": args.learning_rate},
+    ]
+
+    # Add MLP parameters if fidelity control is enabled
+    if args.use_fidelity_control and fidelity_mlp is not None:
+         # Use a potentially different LR for the MLP if specified in args, else use main LR
+        mlp_lr = args.fidelity_mlp_learning_rate if hasattr(args, 'fidelity_mlp_learning_rate') and args.fidelity_mlp_learning_rate else args.learning_rate
+        params_to_optimize.append({"params": fidelity_mlp.parameters(), "lr": mlp_lr})
+        logger.info(f"Added FidelityMLP parameters to optimizer with LR: {mlp_lr}")
+        # Also update the 'trainable_params' variable if used later for grad clipping
+        trainable_params = unet_lora_parameters + list(fidelity_mlp.parameters())
+    else:
+        # Keep original if no fidelity control
+        trainable_params = unet_lora_parameters
 
     def unwrap_model(model):
         model = accelerator.unwrap_model(model)
@@ -625,76 +979,41 @@ def main():
     else:
         optimizer_cls = torch.optim.AdamW
 
+    # train on only lora_layers
     optimizer = optimizer_cls(
-        unet.parameters(),
-        lr=args.learning_rate,
+        params_to_optimize,
         betas=(args.adam_beta1, args.adam_beta2),
         weight_decay=args.adam_weight_decay,
         eps=args.adam_epsilon,
     )
-    
-    def load_image_dataset(source_dir):
-        # Get all image files
-        input_dir = os.path.join(source_dir, "input_image")
-        image_files = [f for f in os.listdir(input_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
-        
-        dataset_dict = {
-            "input_image": [],
-            "edited_image": [],
-            "edit_prompt": []
-        }
-        
-        for img_file in image_files:
-            base_name = os.path.splitext(img_file)[0]
-            
-            # Get full paths
-            input_img_path = os.path.join(source_dir, "input_image", img_file)
-            edited_img_path = os.path.join(source_dir, "edited_image", img_file)
-            prompt_path = os.path.join(source_dir, "edit_prompt", f"{base_name}.txt")
-            
-            # Read prompt
-            with open(prompt_path, 'r', encoding='utf-8') as f:
-                edit_prompt = f.read().strip()
-            
-            dataset_dict["input_image"].append(input_img_path)
-            dataset_dict["edited_image"].append(edited_img_path)
-            dataset_dict["edit_prompt"].append(edit_prompt)
-        
-        # Create dataset and cast image columns
-        dataset = Dataset.from_dict(dataset_dict)
-        dataset = dataset.cast_column("input_image", Image())
-        dataset = dataset.cast_column("edited_image", Image())
-        
-        return dataset
 
-    # Get the datasets: you can either provide your own training and evaluation files (see below)
-    # or specify a Dataset from the hub (the dataset will be downloaded automatically from the datasets Hub).
-
-    # In distributed training, the load_dataset function guarantees that only one local process can concurrently
-    # download the dataset.
+    # Get the datasets using the appropriate loading method
     if args.dataset_name is not None:
-        # Downloading and loading a dataset from the hub.
+        # Downloading and loading a dataset from the hub
         dataset = load_dataset(
             args.dataset_name,
             args.dataset_config_name,
             cache_dir=args.cache_dir,
         )
-    else:
-        data_files = {}
-        if args.train_data_dir is not None:
-            data_files["train"] = os.path.join(args.train_data_dir, "**")
+    elif args.train_data_dir is not None:
+        # Load from the custom directory structure
         try:
-           dataset = {"train": load_image_dataset(args.train_data_dir)}
+            dataset = {"train": load_image_dataset(args.train_data_dir)}
         except Exception as e:
-            print("Error loading dataset:", e)
-            raise
-        # See more about loading custom images at
-        # https://huggingface.co/docs/datasets/main/en/image_load#imagefolder
+            logger.warning(f"Failed to load dataset using custom loader: {e}")
+            # Fall back to standard dataset loading
+            data_files = {"train": os.path.join(args.train_data_dir, "**")}
+            dataset = load_dataset(
+                "imagefolder",
+                data_files=data_files,
+                cache_dir=args.cache_dir,
+            )
+    else:
+        raise ValueError("Need either a dataset name or a training folder.")
 
     # Preprocessing the datasets.
     # We need to tokenize inputs and targets.
     column_names = dataset["train"].column_names
-    print("-----------column_names---------", column_names)
 
     # 6. Get the column names for input/target.
     dataset_columns = DATASET_NAME_MAPPING.get(args.dataset_name, None)
@@ -817,11 +1136,18 @@ def main():
         num_warmup_steps=num_warmup_steps_for_scheduler,
         num_training_steps=num_training_steps_for_scheduler,
     )
-
-    # Prepare everything with our `accelerator`.
-    unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
-        unet, optimizer, train_dataloader, lr_scheduler
-    )
+#-------ACCELERATOR PREPARE-------
+    if args.use_fidelity_control and fidelity_mlp is not None:
+            unet, fidelity_mlp, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+                unet, fidelity_mlp, optimizer, train_dataloader, lr_scheduler
+            )
+            logger.info("Prepared UNet, FidelityMLP, Optimizer, DataLoader, Scheduler with Accelerator.")
+    else:
+        # Original prepare if not using fidelity control
+        unet, optimizer, train_dataloader, lr_scheduler = accelerator.prepare(
+            unet, optimizer, train_dataloader, lr_scheduler
+        )
+        logger.info("Prepared UNet, Optimizer, DataLoader, Scheduler with Accelerator (No FidelityMLP).")
 
     if args.use_ema:
         ema_unet.to(accelerator.device)
@@ -854,7 +1180,12 @@ def main():
     # We need to initialize the trackers we use, and also store our configuration.
     # The trackers initializes automatically on the main process.
     if accelerator.is_main_process:
-        accelerator.init_trackers("instruct-pix2pix", config=vars(args))
+        if args.report_to == "none":
+            accelerator.init_trackers("instruct-pix2pix", config=None)
+        else:
+            # Create a simple config without complex types
+            config_dict = {k: v for k, v in vars(args).items() if isinstance(v, (int, float, str, bool))}
+            accelerator.init_trackers("instruct-pix2pix", config=config_dict)
 
     # Train!
     total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -898,6 +1229,14 @@ def main():
     progress_bar = tqdm(range(global_step, args.max_train_steps), disable=not accelerator.is_local_main_process)
     progress_bar.set_description("Steps")
 
+    # Create and initialize the FidelityMLP
+    if args.use_fidelity_control:
+        fidelity_mlp = FidelityMLP(hidden_size=unet.config.cross_attention_dim)
+        # If using mixed precision, keep the MLP in full precision for stability
+        fidelity_mlp.to(accelerator.device)
+        # Prepare with accelerator
+        fidelity_mlp = accelerator.prepare(fidelity_mlp)
+
     for epoch in range(first_epoch, args.num_train_epochs):
         unet.train()
         train_loss = 0.0
@@ -932,6 +1271,36 @@ def main():
                 # Get the additional image embedding for conditioning.
                 # Instead of getting a diagonal Gaussian here, we simply take the mode.
                 original_image_embeds = vae.encode(batch["original_pixel_values"].to(weight_dtype)).latent_dist.mode()
+                
+                fidelity_tensor_for_loss = None
+                if args.use_fidelity_control and fidelity_mlp is not None:
+                    # Extract fidelity values
+                    fidelity_values = []
+                    prompts_text = tokenizer.batch_decode(batch["input_ids"], skip_special_tokens=True)
+                    for prompt_text in prompts_text:
+                        match = re.search(r"f\s*=?\s*(\d+)|f(\d+)", prompt_text, re.IGNORECASE)
+                        if match:
+                            f_int = int(match.group(1) if match.group(1) else match.group(2))
+                            f_int = max(0, min(f_int, 9))
+                            fidelity_val = f_int / 9.0
+                        else:
+                            fidelity_val = 0.7 # Default
+                        fidelity_values.append(fidelity_val)
+
+                    fidelity_tensor = torch.tensor(fidelity_values, device=latents.device, dtype=latents.dtype).unsqueeze(-1)
+                    
+                    fidelity_embedding = fidelity_mlp(fidelity_tensor) # Shape [B, hidden_size]
+
+                    # Inject the fidelity embedding into the text embeddings
+                    injection_scale = args.fidelity_weight
+                    encoder_hidden_states[:, 0:1, :] = encoder_hidden_states[:, 0:1, :] + injection_scale * fidelity_embedding.unsqueeze(1)
+                    
+                    # Save the original tensor for loss calculation
+                    fidelity_tensor_for_loss = fidelity_tensor.squeeze(-1) # Shape [B]
+
+                    # Optional: Log embedding stats periodically
+                    if accelerator.is_main_process and global_step % 10 == 0:
+                        logger.info(f"Step {global_step}: Fidelity embedding stats: mean={fidelity_embedding.mean().item():.4f}, std={fidelity_embedding.std().item():.4f}")
 
                 # Conditioning dropout to support classifier-free guidance during inference. For more details
                 # check out the section 3.2.1 of the original paper https://arxiv.org/abs/2211.09800.
@@ -965,30 +1334,116 @@ def main():
                 else:
                     raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
 
+                
                 # Predict the noise residual and compute loss
                 model_pred = unet(concatenated_noisy_latents, timesteps, encoder_hidden_states, return_dict=False)[0]
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+                                    
+                
+                
+# --- ADD FIDELITY LOSS ---
+                if args.use_fidelity_control and fidelity_mlp is not None and fidelity_tensor_for_loss is not None:
+                    fidelity_loss_component = torch.tensor(0.0, device=loss.device)
 
-                # Gather the losses across all processes for logging (if we use distributed training).
+                    if args.no_proxy: # Using Full Fidelity Loss
+                        if global_step % 10 == 0: # Compute less often
+                            with torch.no_grad():
+                                # Decode prediction to pixel space
+                                pred_latents = noise_scheduler.step(model_pred.detach(), timesteps[0], noisy_latents, return_dict=False)[0]
+                                pred_latents = pred_latents.to(dtype=weight_dtype)
+                                pred_images = vae.decode(pred_latents / vae.config.scaling_factor, return_dict=False)[0]
+                                input_images = batch["original_pixel_values"].to(device=pred_images.device, dtype=pred_images.dtype)
+                                target_images = batch["edited_pixel_values"].to(device=pred_images.device, dtype=pred_images.dtype)
+
+                                # Initialize LPIPS if needed (ensure this happens only once - requires global lpips_loss_fn or passing)
+                                global lpips_loss_fn 
+                                if args.fidelity_loss_type == 'lpips' and lpips_loss_fn is None:
+                                        logger.info("Initializing LPIPS model for LoRA script...")
+                                        lpips_loss_fn = lpips.LPIPS(net='vgg').to(accelerator.device)
+                                        lpips_loss_fn.eval()
+
+                                # Compute full fidelity loss
+                                fidelity_loss_component = compute_fidelity_loss(
+                                    pred_images=pred_images,
+                                    input_images=input_images,
+                                    target_images=target_images,
+                                    fidelity_values=fidelity_tensor_for_loss,
+                                    loss_type=args.fidelity_loss_type,
+                                    lpips_model=lpips_loss_fn if args.fidelity_loss_type == 'lpips' else None,
+                                    device=accelerator.device
+                                )
+                            # Log full loss value periodically
+                            if accelerator.is_main_process and global_step % 10 == 0:
+                                logger.info(f"Step {global_step}: Using FULL fidelity loss ({args.fidelity_loss_type}): {fidelity_loss_component.item():.4f}")
+
+                    else: # Using Proxy Fidelity Loss
+                        fidelity_scale = fidelity_tensor_for_loss.view(-1, 1, 1, 1)
+                        fidelity_loss_component = torch.mean(torch.abs(model_pred) * fidelity_scale)
+                        if accelerator.is_main_process and global_step % 100 == 0:
+                           logger.info(f"Step {global_step}: Using PROXY fidelity loss: {fidelity_loss_component.item():.4f}")
+
+                    # Scale and add the fidelity loss component
+                    fidelity_weight = min(args.fidelity_weight, args.fidelity_weight * (global_step / 200)) # Gradual increase/ more like a warmup
+                    loss = loss + fidelity_weight * fidelity_loss_component
+                
+#---------GATHER LOSS FOR LOGGING---------#
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
                 train_loss += avg_loss.item() / args.gradient_accumulation_steps
 
                 # Backpropagate
                 accelerator.backward(loss)
+                
                 if accelerator.sync_gradients:
-                    accelerator.clip_grad_norm_(unet.parameters(), args.max_grad_norm)
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
+                    accelerator.clip_grad_norm_(trainable_params, args.max_grad_norm)
+                    optimizer.step()
+                    lr_scheduler.step()
+                    optimizer.zero_grad()
 
             # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
                 if args.use_ema:
-                    ema_unet.step(unet.parameters())
+                    ema_unet.step(trainable_params)
                 progress_bar.update(1)
                 global_step += 1
                 accelerator.log({"train_loss": train_loss}, step=global_step)
                 train_loss = 0.0
+
+                # Add validation check here
+                if (
+                    args.val_images_dir is not None and 
+                    (args.validation_steps > 0 and global_step % args.validation_steps == 0)
+                ):
+                    logger.info(f"Running validation at step {global_step}")
+                    if args.use_ema:
+                        ema_unet.store(unet.parameters())
+                        ema_unet.copy_to(unet.parameters())
+                    
+                    # Create the pipeline
+                    pipeline = StableDiffusionInstructPix2PixPipeline.from_pretrained(
+                        args.pretrained_model_name_or_path,
+                        unet=unwrap_model(unet),
+                        text_encoder=unwrap_model(text_encoder),
+                        vae=unwrap_model(vae),
+                        revision=args.revision,
+                        variant=args.variant,
+                        torch_dtype=weight_dtype,
+                    )
+                    
+                    accelerator.step = global_step
+                    
+                    log_validation(
+                        pipeline,
+                        args,
+                        accelerator,
+                        generator,
+                        fidelity_mlp=fidelity_mlp if args.use_fidelity_control else None,
+                    )
+
+                    if args.use_ema:
+                        ema_unet.restore(unet.parameters())
+
+                    del pipeline
+                    torch.cuda.empty_cache()
 
                 if global_step % args.checkpointing_steps == 0:
                     if accelerator.is_main_process:
@@ -1014,6 +1469,16 @@ def main():
 
                         save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                         accelerator.save_state(save_path)
+                        unwrapped_unet = unwrap_model(unet)
+                        unet_lora_state_dict = convert_state_dict_to_diffusers(
+                            get_peft_model_state_dict(unwrapped_unet)
+                        )
+
+                        StableDiffusionInstructPix2PixPipeline.save_lora_weights(
+                            save_directory=save_path,
+                            unet_lora_layers=unet_lora_state_dict,
+                            safe_serialization=True,
+                        )
                         logger.info(f"Saved state to {save_path}")
 
             logs = {"step_loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
@@ -1022,46 +1487,22 @@ def main():
             if global_step >= args.max_train_steps:
                 break
 
-        if accelerator.is_main_process:
-            if (
-                (args.val_image_url is not None)
-                and (args.validation_prompt is not None)
-                and (epoch % args.validation_epochs == 0)
-            ):
-                if args.use_ema:
-                    # Store the UNet parameters temporarily and load the EMA parameters to perform inference.
-                    ema_unet.store(unet.parameters())
-                    ema_unet.copy_to(unet.parameters())
-                # The models need unwrapping because for compatibility in distributed training mode.
-                pipeline = StableDiffusionInstructPix2PixPipeline.from_pretrained(
-                    args.pretrained_model_name_or_path,
-                    unet=unwrap_model(unet),
-                    text_encoder=unwrap_model(text_encoder),
-                    vae=unwrap_model(vae),
-                    revision=args.revision,
-                    variant=args.variant,
-                    torch_dtype=weight_dtype,
-                )
-
-                log_validation(
-                    pipeline,
-                    args,
-                    accelerator,
-                    generator,
-                )
-
-                if args.use_ema:
-                    # Switch back to the original UNet parameters.
-                    ema_unet.restore(unet.parameters())
-
-                del pipeline
-                torch.cuda.empty_cache()
-
     # Create the pipeline using the trained modules and save it.
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
         if args.use_ema:
             ema_unet.copy_to(unet.parameters())
+
+        # store only LORA layers
+        unet = unet.to(torch.float32)
+
+        unwrapped_unet = unwrap_model(unet)
+        unet_lora_state_dict = convert_state_dict_to_diffusers(get_peft_model_state_dict(unwrapped_unet))
+        StableDiffusionInstructPix2PixPipeline.save_lora_weights(
+            save_directory=args.output_dir,
+            unet_lora_layers=unet_lora_state_dict,
+            safe_serialization=True,
+        )
 
         pipeline = StableDiffusionInstructPix2PixPipeline.from_pretrained(
             args.pretrained_model_name_or_path,
@@ -1071,23 +1512,25 @@ def main():
             revision=args.revision,
             variant=args.variant,
         )
-        pipeline.save_pretrained(args.output_dir)
+        pipeline.load_lora_weights(args.output_dir)
 
-        if args.push_to_hub:
-            upload_folder(
-                repo_id=repo_id,
-                folder_path=args.output_dir,
-                commit_message="End of training",
-                ignore_patterns=["step_*", "epoch_*"],
-            )
-
+        images = None
         if (args.val_image_url is not None) and (args.validation_prompt is not None):
-            log_validation(
+            images = log_validation(
                 pipeline,
                 args,
                 accelerator,
                 generator,
+                fidelity_mlp=fidelity_mlp if args.use_fidelity_control else None,
             )
+        # When saving the trained model, also save the FidelityMLP if used
+        if args.use_fidelity_control and fidelity_mlp is not None and accelerator.is_main_process:
+            fidelity_mlp_path = os.path.join(args.output_dir, "fidelity_mlp")
+            os.makedirs(fidelity_mlp_path, exist_ok=True)
+            unwrapped_fidelity_mlp = accelerator.unwrap_model(fidelity_mlp)
+            unwrapped_fidelity_mlp.save_pretrained(fidelity_mlp_path)
+            logger.info(f"Saved FidelityMLP LoRA weights to {fidelity_mlp_path}")
+
     accelerator.end_training()
 
 

@@ -19,6 +19,9 @@ __pycache__/
 /DoodlesTests/
 /validation_results/
 /DoodleColab/
+/Detailer/
+/PixView/
+/forgemini/
 /instruct-pix2pix-model/
 # C extensions
 *.so
@@ -239,3 +242,6 @@ TODO
 hypothesis.txt
 exfidelity_mlp.py
 BADtrain_instruct_pix2pix_sdxl_fidelity.py
+DoodlePix/exinference.py
+NoPromptconvert2lmdb.py
+pipeline_stable_diffusion_xl_instruct_pix2pix_pooled.py

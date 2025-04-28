@@ -1,9 +1,3 @@
-"""
-    Custom implementation of InstructPix2Pix pipeline script from the diffusers repo
-    https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/stable_diffusion/pipeline_stable_diffusion_instruct_pix2pix.py
-
-"""
-
 import inspect
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -577,13 +571,11 @@ class StableDiffusionInstructPix2PixPipeline(
             if prompt is not None:
                 if isinstance(prompt, str):
                     import re
-                    # Extract fidelity value - look for patterns like "f5" or "f=5"
                     match = re.search(r"f\s*=?\s*(\d+)|f(\d+)", prompt, re.IGNORECASE)
                     if match:
                         f_int = int(match.group(1) if match.group(1) else match.group(2))
-                        f_int = max(1, min(f_int, 9))
-                        # Map to normalized range [0.1, 0.9]
-                        fidelity_val = 0.1 + (f_int - 1) * (0.8 / 8)
+                        f_int = max(0, min(f_int, 9))
+                        fidelity_val = f_int / 9.0
                 elif isinstance(prompt, list):
                     import re
                     f_vals = []
@@ -591,8 +583,8 @@ class StableDiffusionInstructPix2PixPipeline(
                         match = re.search(r"f\s*=?\s*(\d+)|f(\d+)", p, re.IGNORECASE)
                         if match:
                             f_int = int(match.group(1) if match.group(1) else match.group(2))
-                            f_int = max(1, min(f_int, 9))
-                            f_vals.append(0.1 + (f_int - 1) * (0.8 / 8))
+                            f_int = max(0, min(f_int, 9))
+                            f_vals.append(f_int / 9.0)
                     if f_vals:
                         fidelity_val = sum(f_vals) / len(f_vals)
 
@@ -603,9 +595,8 @@ class StableDiffusionInstructPix2PixPipeline(
             # Get fidelity embedding
             fidelity_embedding = self.fidelity_mlp(fidelity_tensor)  # (batch, hidden_size)
             
-            # FIXED: Instead of adding a new token, modify the first token embedding
             # This keeps the sequence length the same (77 tokens)
-            prompt_embeds[:, 0] = prompt_embeds[:, 0] + 0.2 * fidelity_embedding
+            prompt_embeds[:, 0] = prompt_embeds[:, 0] + (0.8 * fidelity_embedding)
 
         bs_embed, seq_len, _ = prompt_embeds.shape
         # duplicate text embeddings for each generation per prompt
