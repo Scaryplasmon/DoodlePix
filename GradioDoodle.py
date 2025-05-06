@@ -5,7 +5,8 @@ matplotlib.use('Agg') # Set backend BEFORE importing pyplot or other conflicting
 
 import gradio as gr
 import torch
-from diffusers import StableDiffusionInstructPix2PixPipeline, EulerAncestralDiscreteScheduler
+from diffusers import  EulerAncestralDiscreteScheduler
+from DoodlePix_pipeline import StableDiffusionInstructPix2PixPipeline
 from PIL import Image, ImageOps # Added ImageOps for inversion
 import numpy as np
 import os
@@ -146,7 +147,7 @@ def generate_image(drawing_input, prompt, fidelity_slider, steps, guidance, imag
         # Invert the image: White bg -> Black bg, Black lines -> White lines
         input_image_inverted = ImageOps.invert(input_image_pil)
         #save the inverted image
-        input_image_inverted.save("input_image_inverted.png")
+        # input_image_inverted.save("input_image_inverted.png")
 
         # Ensure image is 512x512
         if input_image_inverted.size != (512, 512):

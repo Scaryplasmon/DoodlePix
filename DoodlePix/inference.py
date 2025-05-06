@@ -27,17 +27,13 @@ class InferenceHandler:
         import torch
         # Import both pipeline types and the scheduler
         from diffusers import (
-            StableDiffusionInstructPix2PixPipeline,
-            EulerAncestralDiscreteScheduler,
+            EulerAncestralDiscreteScheduler
         )
         try:
-            from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl_instruct_pix2pix import (
-                StableDiffusionXLInstructPix2PixPipeline,
-            )
-            print("Using custom SDXL InstructPix2Pix pipeline.")
+            from DoodlePix_pipeline import StableDiffusionInstructPix2PixPipeline
+        
         except ImportError:
-            print("Warning: Custom SDXL pipeline not found. Falling back to diffusers version.")
-            self._sdxl_pipeline_class = StableDiffusionXLInstructPix2PixPipeline
+            print("Warning: Custom pipeline not found.")
 
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -47,7 +43,7 @@ class InferenceHandler:
 
         self._torch = torch
         self._sd_pipeline_class = StableDiffusionInstructPix2PixPipeline
-        self._sdxl_pipeline_class = StableDiffusionXLInstructPix2PixPipeline
+        self._sdxl_pipeline_class = StableDiffusionInstructPix2PixPipeline
         self._euler_ancestral_scheduler = EulerAncestralDiscreteScheduler
         self._setup_done = True
 
@@ -82,7 +78,6 @@ class InferenceHandler:
             fidelity_mlp_path = os.path.join(model_path, "fidelity_mlp")
             fidelity_mlp_instance = None
 
-            # Check and load fidelity MLP first if it exists
             if os.path.exists(fidelity_mlp_path):
                 print(f"Found potential fidelity MLP at: {fidelity_mlp_path}")
                 try:
@@ -94,20 +89,17 @@ class InferenceHandler:
                     fidelity_mlp_instance = None
 
 
-            # Load the appropriate pipeline
             if is_sdxl and hasattr(pipeline_class, 'from_pretrained_with_fidelity') and fidelity_mlp_instance:
                  print("Loading SDXL pipeline using from_pretrained_with_fidelity...")
-                 # If using the custom pipeline with the special loader method:
                  self.pipeline = pipeline_class.from_pretrained_with_fidelity(
                      model_path,
-                     fidelity_mlp_path=fidelity_mlp_path, # Pass the path again for the method
+                     fidelity_mlp_path=fidelity_mlp_path,
                      torch_dtype=self._torch.float16,
                      safety_checker=None,
                      scheduler=scheduler
                  ).to(self.device)
             elif is_sdxl and fidelity_mlp_instance:
                  print("Loading SDXL pipeline and manually attaching MLP...")
-                 # Load standard SDXL pipeline first
                  self.pipeline = pipeline_class.from_pretrained(
                      model_path,
                      torch_dtype=self._torch.float16,

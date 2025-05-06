@@ -1,3 +1,18 @@
+#!/usr/bin/env python
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
     Custom implementation of InstructPix2Pix training script from the diffusers repo
     https://github.com/huggingface/diffusers/blob/main/examples/instruct_pix2pix/train_instruct_pix2pix.py
@@ -32,7 +47,8 @@ from transformers import CLIPTextModel, CLIPTokenizer
 from typing import Optional
 
 import diffusers
-from diffusers import AutoencoderKL, DDPMScheduler, StableDiffusionInstructPix2PixPipeline, UNet2DConditionModel
+from diffusers import AutoencoderKL, DDPMScheduler, UNet2DConditionModel
+from DoodlePix_pipeline import StableDiffusionInstructPix2PixPipeline
 from diffusers.optimization import get_scheduler
 from diffusers.training_utils import EMAModel
 from diffusers.utils import check_min_version, deprecate, is_wandb_available
@@ -78,7 +94,6 @@ def log_validation(
         pipeline = pipeline.to(accelerator.device)
         pipeline.set_progress_bar_config(disable=True)
         
-        # Get all validation images and their corresponding prompts
         val_images_dir = args.val_images_dir
         try:
             image_files = [f for f in os.listdir(val_images_dir) if f.endswith(('.png', '.jpg', '.jpeg'))]
@@ -94,7 +109,7 @@ def log_validation(
         else:
             autocast_ctx = torch.autocast(accelerator.device.type)
 
-        fidelity_levels = [2, 8]  # Low, high fidelity
+        fidelity_levels = [2, 8]
         
         with autocast_ctx:
             for image_file in image_files:
@@ -524,11 +539,9 @@ def parse_args():
     if env_local_rank != -1 and env_local_rank != args.local_rank:
         args.local_rank = env_local_rank
 
-    # Sanity checks
     if args.dataset_name is None and args.train_data_dir is None:
         raise ValueError("Need either a dataset name or a training folder.")
 
-    # default to using the same revision for the non-ema model if not specified
     if args.non_ema_revision is None:
         args.non_ema_revision = args.revision
 
@@ -553,17 +566,15 @@ class LMDBImagePromptDataset(TorchDataset):
         """
         self.lmdb_path = lmdb_path
         self.transform = transform
-        self.env = None # Environment will be opened in __getitem__ if needed, better for multiprocessing
+        self.env = None
 
         logger.info(f"Initializing LMDB dataset from: {lmdb_path}")
 
         try:
-            # Open temporarily to get keys and length
             temp_env = lmdb.open(self.lmdb_path, readonly=True, lock=False, readahead=False, meminit=False)
             with temp_env.begin(write=False) as txn:
                 self.length = txn.stat()['entries']
                 logger.info("Reading keys from LMDB... (This might take a moment)")
-                # Read all keys into memory - requires keys fit in RAM, usually okay.
                 self.keys = [key for key in tqdm(txn.cursor().iternext(keys=True, values=False), total=self.length, desc="Loading LMDB keys")]
             temp_env.close()
             logger.info(f"Found {self.length} entries in LMDB.")
@@ -572,15 +583,13 @@ class LMDBImagePromptDataset(TorchDataset):
             raise IOError(f"Could not initialize LMDB dataset at {lmdb_path}")
 
     def _init_db(self):
-        # Open the environment in the current process.
-        # lock=False is important for multi-worker DataLoader
+
         self.env = lmdb.open(self.lmdb_path, readonly=True, lock=False, readahead=False, meminit=False)
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, index):
-        # Open DB in each worker process if not already opened
         if self.env is None:
             self._init_db()
 
@@ -591,31 +600,24 @@ class LMDBImagePromptDataset(TorchDataset):
         if serialized_data is None:
              raise KeyError(f"Key {key.decode('utf-8')} not found in LMDB (index {index}). This shouldn't happen.")
 
-        # Deserialize data
         try:
             input_img_bytes, edited_img_bytes, edit_prompt = pickle.loads(serialized_data)
         except pickle.UnpicklingError as e:
             raise RuntimeError(f"Failed to unpickle data for key {key.decode('utf-8')}: {e}")
 
-        # Decode images from bytes using PIL
         try:
             input_image = PILImage.open(io.BytesIO(input_img_bytes)).convert('RGB')
             edited_image = PILImage.open(io.BytesIO(edited_img_bytes)).convert('RGB')
         except Exception as e:
             raise RuntimeError(f"Failed to decode image for key {key.decode('utf-8')}: {e}")
 
-        # Prepare sample dictionary
         sample = {
             'input_image': input_image,
             'edited_image': edited_image,
-            'edit_prompt': edit_prompt # Prompt is already a string
+            'edit_prompt': edit_prompt
         }
 
-        # Apply transforms (which should handle the dictionary)
         if self.transform:
-            # Your preprocess_train function needs to be adapted to take this dict
-            # or you define a transform chain that works on PIL images directly.
-            # Let's assume preprocess_train can be adapted or replaced by a transform.
              sample = self.transform(sample)
 
         return sample
@@ -647,13 +649,11 @@ def main():
         project_config=accelerator_project_config,
     )
 
-    # Disable AMP for MPS.
     if torch.backends.mps.is_available():
         accelerator.native_amp = False
 
     generator = torch.Generator(device=accelerator.device).manual_seed(args.seed)
 
-    # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
@@ -669,11 +669,9 @@ def main():
         transformers.utils.logging.set_verbosity_error()
         diffusers.utils.logging.set_verbosity_error()
 
-    # If passed along, set the training seed now.
     if args.seed is not None:
         set_seed(args.seed)
 
-    # Handle the repository creation
     if accelerator.is_main_process:
         if args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
@@ -683,7 +681,6 @@ def main():
                 repo_id=args.hub_model_id or Path(args.output_dir).name, exist_ok=True, token=args.hub_token
             ).repo_id
 
-    # Load scheduler, tokenizer and models.
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
     tokenizer = CLIPTokenizer.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
@@ -733,11 +730,9 @@ def main():
         new_conv_in.weight[:, :4, :, :].copy_(unet.conv_in.weight)
         unet.conv_in = new_conv_in
 
-    # Freeze vae and text_encoder
     vae.requires_grad_(False)
-    # Freeze text encoder
     text_encoder.requires_grad_(False)
-    text_encoder.eval()  # Set to eval mode
+    text_encoder.eval()
 
     if args.use_ema:
         ema_unet = EMAModel(unet.parameters(), model_cls=UNet2DConditionModel, model_config=unet.config)
@@ -790,19 +785,15 @@ def main():
                 del load_model
 
             for i in range(len(models)):
-                # pop models so that they are not loaded again
                 model = models.pop()
 
-                # Check if the model is FidelityMLP
                 if isinstance(model, FidelityMLP):
-                    # Load FidelityMLP
                     fidelity_mlp_path = os.path.join(input_dir, "fidelity_mlp")
                     if os.path.exists(fidelity_mlp_path):
                         load_model = FidelityMLP.from_pretrained(fidelity_mlp_path)
                         model.load_state_dict(load_model.state_dict())
                         del load_model
                 else:
-                    # load diffusers style into model
                     load_model = UNet2DConditionModel.from_pretrained(input_dir, subfolder="unet")
                     model.register_to_config(**load_model.config)
                     model.load_state_dict(load_model.state_dict())
@@ -824,7 +815,6 @@ def main():
             args.learning_rate * args.gradient_accumulation_steps * args.train_batch_size * accelerator.num_processes
         )
 
-    # Load or create FidelityMLP
     if args.fidelity_mlp_path:
         if os.path.exists(args.fidelity_mlp_path):
             logger.info(f"Loading FidelityMLP from {args.fidelity_mlp_path}")
@@ -841,7 +831,6 @@ def main():
 
     logger.info("This has Normalized Range 0-9")
     
-    # Move fidelity_mlp to device
     fidelity_mlp.to(accelerator.device)
 
 
@@ -854,8 +843,6 @@ def main():
     else:
         optimizer_cls = torch.optim.AdamW
         
-    # Optimizer set for unet and fidelity_mlp
-
     params_to_optimize = [
         {"params": unet.parameters(), "lr": args.learning_rate},
         {"params": fidelity_mlp.parameters(), "lr": args.fidelity_mlp_learning_rate if args.fidelity_mlp_learning_rate else args.learning_rate}
@@ -874,7 +861,7 @@ def main():
             transforms.Resize(args.resolution, interpolation=transforms.InterpolationMode.BILINEAR),
             transforms.CenterCrop(args.resolution) if args.center_crop else transforms.RandomCrop(args.resolution),
             transforms.RandomHorizontalFlip() if args.random_flip else transforms.Lambda(lambda x: x),
-            # Add random rotation of +90 or -90 degrees for 10% of images
+            # random rotation of +90 or -90 degrees for 10% of images
             transforms.Lambda(lambda x: transforms.functional.rotate(x, 90 * (2 * torch.randint(0, 2, (1,)).item() - 1)) 
                              if torch.rand(1).item() < 0.1 else x),
         ]
@@ -884,11 +871,7 @@ def main():
     if args.dataset_name is not None:
         logger.warning("--dataset_name is ignored when --train_data_dir is provided for LMDB loading.")
 
-    # Define the transformations that will be applied within the LMDB dataset's __getitem__
-    # Ensure image augmentations are defined (should be around line 793 in original script)
-    # train_transforms = transforms.Compose([...]) # Make sure this is defined before this point
 
-    # Define the transform function to be passed to LMDBImagePromptDataset
     def lmdb_transform(sample):
         """
         Applies transformations to a single sample dict loaded from LMDB.
@@ -898,58 +881,46 @@ def main():
         edited_pil = sample['edited_image']
         prompt = sample['edit_prompt']
 
-        # 1. Define ToTensor & Normalize (Must match model expectations, usually [-1, 1])
         image_tensor_transforms = transforms.Compose(
             [
-                transforms.ToTensor(), # Converts PIL [0, 255] to Tensor [0.0, 1.0]
-                transforms.Normalize([0.5], [0.5]) # Normalizes Tensor [0.0, 1.0] to [-1.0, 1.0]
+                transforms.ToTensor(),
+                transforms.Normalize([0.5], [0.5])
             ]
         )
 
-        # 2. Apply SAME random geometric transforms (crop, flip, rotate) to both images
-        seed = random.randint(0, 2**32 - 1) # Generate a seed for this pair
+        seed = random.randint(0, 2**32 - 1)
 
-        # Apply geometric transforms to input image
         torch.manual_seed(seed)
         random.seed(seed)
-        input_pil_augmented = train_transforms(input_pil) # Output is still PIL
+        input_pil_augmented = train_transforms(input_pil)
 
-        # Apply geometric transforms to edited image
         torch.manual_seed(seed)
         random.seed(seed)
-        edited_pil_augmented = train_transforms(edited_pil) # Output is still PIL
+        edited_pil_augmented = train_transforms(edited_pil)
 
-        # 3. Convert augmented PIL images to Tensors and Normalize
         original_pixel_values = image_tensor_transforms(input_pil_augmented)
         edited_pixel_values = image_tensor_transforms(edited_pil_augmented)
 
-        # 4. Tokenize the prompt
-        input_ids = tokenize_captions([prompt])[0] # Tokenize single prompt, get first element
+        input_ids = tokenize_captions([prompt])[0]
 
         return {
-            "original_pixel_values": original_pixel_values, # Now a Tensor
-            "edited_pixel_values": edited_pixel_values,   # Now a Tensor
+            "original_pixel_values": original_pixel_values,
+            "edited_pixel_values": edited_pixel_values,
             "input_ids": input_ids,
         }
 
     logger.info(f"Loading dataset using LMDBImagePromptDataset from: {args.train_data_dir}")
-    # Instantiate the LMDB dataset
     try:
         train_dataset = LMDBImagePromptDataset(lmdb_path=args.train_data_dir, transform=lmdb_transform)
     except Exception as e:
         logger.error(f"Failed to initialize LMDB dataset at {args.train_data_dir}: {e}", exc_info=True)
         raise
 
-    # Handle max_train_samples (if provided) - Requires Subset
     if args.max_train_samples is not None:
         if args.max_train_samples < len(train_dataset):
             logger.info(f"Truncating LMDB dataset to {args.max_train_samples} samples.")
             from torch.utils.data import Subset
-            # Ensure reproducibility if shuffling before selecting
-            # indices = list(range(len(train_dataset)))
-            # random.Random(args.seed).shuffle(indices) # Use fixed seed if you shuffle
-            # train_dataset = Subset(train_dataset, indices[:args.max_train_samples])
-            # Or simply take the first N samples:
+
             train_dataset = Subset(train_dataset, list(range(args.max_train_samples)))
         else:
              logger.info(f"max_train_samples ({args.max_train_samples}) >= dataset size ({len(train_dataset)}), using full dataset.")
@@ -966,7 +937,6 @@ def main():
             "input_ids": input_ids,
         }
 
-    # DataLoader:
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset,
         shuffle=True,
@@ -994,7 +964,6 @@ def main():
         num_training_steps=num_training_steps_for_scheduler,
     )
 
-    # Prepare everything with our `accelerator`.
     unet, optimizer, train_dataloader, lr_scheduler, fidelity_mlp = accelerator.prepare(
         unet, optimizer, train_dataloader, lr_scheduler, fidelity_mlp
     )
@@ -1002,8 +971,6 @@ def main():
     if args.use_ema:
         ema_unet.to(accelerator.device)
 
-    # For mixed precision training we cast the text_encoder and vae weights to half-precision
-    # as these models are only used for inference, keeping weights in full precision is not required.
     weight_dtype = torch.float32
     if accelerator.mixed_precision == "fp16":
         weight_dtype = torch.float16
@@ -1040,12 +1007,10 @@ def main():
     global_step = 0
     first_epoch = 0
 
-    # Potentially load in the weights and states from a previous save
     if args.resume_from_checkpoint:
         if args.resume_from_checkpoint != "latest":
             path = os.path.basename(args.resume_from_checkpoint)
         else:
-            # Get the most recent checkpoint
             dirs = os.listdir(args.output_dir)
             dirs = [d for d in dirs if d.startswith("checkpoint")]
             dirs = sorted(dirs, key=lambda x: int(x.split("-")[1]))
@@ -1065,16 +1030,13 @@ def main():
             first_epoch = global_step // num_update_steps_per_epoch
             resume_step = resume_global_step % (num_update_steps_per_epoch * args.gradient_accumulation_steps)
 
-    # Only show the progress bar once on each machine.
     progress_bar = tqdm(range(global_step, args.max_train_steps), disable=not accelerator.is_local_main_process)
     progress_bar.set_description("Steps")
 
     for epoch in range(first_epoch, args.num_train_epochs):
         unet.train()
-        # text_encoder.train()  # Ensure text encoder is in training mode
         train_loss = 0.0
         for step, batch in enumerate(train_dataloader):
-            # Skip steps until we reach the resumed step
             if args.resume_from_checkpoint and epoch == first_epoch and step < resume_step:
                 if step % args.gradient_accumulation_steps == 0:
                     progress_bar.update(1)
@@ -1083,34 +1045,24 @@ def main():
             
 
             with accelerator.accumulate(unet):
-                # We want to learn the denoising process w.r.t the edited images which
-                # are conditioned on the original image (which was edited) and the edit instruction.
-                # So, first, convert images to latent space.
+
                 latents = vae.encode(batch["edited_pixel_values"].to(weight_dtype)).latent_dist.sample()
                 latents = latents * vae.config.scaling_factor
 
-                # Sample noise that we'll add to the latents
                 noise = torch.randn_like(latents)
                 bsz = latents.shape[0]
-                # Sample a random timestep for each image
                 timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
                 timesteps = timesteps.long()
 
-                # Add noise to the latents according to the noise magnitude at each timestep
-                # (this is the forward diffusion process)
                 noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
 
-                # Get the text embedding for conditioning.
                 encoder_hidden_states = text_encoder(batch["input_ids"])[0]
 
-                # Get the additional image embedding for conditioning.
-                # Instead of getting a diagonal Gaussian here, we simply take the mode.
                 original_image_embeds = vae.encode(batch["original_pixel_values"].to(weight_dtype)).latent_dist.mode()
                 
                 fidelity_values = []
                 prompts_text = tokenizer.batch_decode(batch["input_ids"], skip_special_tokens=True)
                 for prompt_text in prompts_text:
-                    import re # Make sure re is imported
                     match = re.search(r"f\s*=?\s*(\d+)|f(\d+)", prompt_text, re.IGNORECASE)
                     if match:
                         f_int = int(match.group(1) if match.group(1) else match.group(2))
@@ -1132,32 +1084,26 @@ def main():
                 injection_scale = args.fidelity_weight
                 encoder_hidden_states[:, 0:1, :] = encoder_hidden_states[:, 0:1, :] + injection_scale * fidelity_embedding.unsqueeze(1)
                 
-                fidelity_tensor = fidelity_tensor.squeeze(-1) # Back to shape [B] for loss fn
+                fidelity_tensor = fidelity_tensor.squeeze(-1)
                 
 #--------CONDITIONING DROPOUT TO SUPPORT CLASSIFIER-FREE GUIDANCE DURING INFERENCE.-------#
                 if args.conditioning_dropout_prob is not None:
                     random_p = torch.rand(bsz, device=latents.device, generator=generator)
-                    # Sample masks for the edit prompts.
                     prompt_mask = random_p < 2 * args.conditioning_dropout_prob
                     prompt_mask = prompt_mask.reshape(bsz, 1, 1)
-                    # Final text conditioning.
                     null_conditioning = text_encoder(tokenize_captions([""]).to(accelerator.device))[0]
                     encoder_hidden_states = torch.where(prompt_mask, null_conditioning, encoder_hidden_states)
 
-                    # Sample masks for the original images.
                     image_mask_dtype = original_image_embeds.dtype
                     image_mask = 1 - (
                         (random_p >= args.conditioning_dropout_prob).to(image_mask_dtype)
                         * (random_p < 3 * args.conditioning_dropout_prob).to(image_mask_dtype)
                     )
                     image_mask = image_mask.reshape(bsz, 1, 1, 1)
-                    # Final image conditioning.
                     original_image_embeds = image_mask * original_image_embeds
 
-                # Concatenate the `original_image_embeds` with the `noisy_latents`.
                 concatenated_noisy_latents = torch.cat([noisy_latents, original_image_embeds], dim=1)
 
-                # Get the target for loss depending on the prediction type
                 if noise_scheduler.config.prediction_type == "epsilon":
                     target = noise
                 elif noise_scheduler.config.prediction_type == "v_prediction":
@@ -1165,7 +1111,6 @@ def main():
                 else:
                     raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
 
-                # Predict the noise residual and compute loss
                 model_pred = unet(concatenated_noisy_latents, timesteps, encoder_hidden_states, return_dict=False)[0]
                 loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
                 if accelerator.is_main_process and global_step % 100 == 0:
@@ -1177,30 +1122,24 @@ def main():
 #---------COMPUTE FIDELITY LOSS---------#
                 if args.no_proxy:
                     if global_step % 10 == 0:
-                        # We need to detach the model prediction to avoid double backprop
                         with torch.no_grad():
-                            # Get the current predicted image (at this noise level)
                             pred_latents = noise_scheduler.step(
                                 model_pred.detach(), timesteps[0], noisy_latents, return_dict=False
                             )[0]
                             
-                            # Convert to the same dtype as the VAE
                             pred_latents = pred_latents.to(dtype=weight_dtype)
                             
-                            # Decode to pixel space
                             pred_images = vae.decode(pred_latents / vae.config.scaling_factor, return_dict=False)[0]
                             
-                            # Also ensure input_images and target_images are in the right format
                             input_images = batch["original_pixel_values"].to(device=pred_images.device, dtype=pred_images.dtype)
                             target_images = batch["edited_pixel_values"].to(device=pred_images.device, dtype=pred_images.dtype)
                             
-                            global lpips_loss_fn # Use global or pass from main()
+                            global lpips_loss_fn
                             if args.fidelity_loss_type == 'lpips' and lpips_loss_fn is None:
                                 logger.info("Initializing LPIPS model...")
                                 lpips_loss_fn = lpips.LPIPS(net='vgg').to(accelerator.device)
                                 lpips_loss_fn.eval()
                             
-                            # Compute fidelity loss
                             fidelity_loss = compute_fidelity_loss(
                                 pred_images=pred_images,
                                 input_images=input_images,
@@ -1211,7 +1150,6 @@ def main():
                                 device=accelerator.device
                             )
                             
-                            # Log the losses
                             if accelerator.is_main_process and global_step % 100 == 0:
                                 logger.info(f"Step {global_step}: Sample extracted fidelity values: {fidelity_values[:4]}")
                                 logger.info(f"Step {global_step}: Fidelity tensor for loss: {fidelity_tensor[:4]}")
@@ -1221,22 +1159,18 @@ def main():
                     if accelerator.is_main_process and global_step % 100 == 0:
                         logger.info(f"Step {global_step}: Using PROXY fidelity loss: {fidelity_loss.item():.4f}")
 
-                # Scale the fidelity loss - start with a small weight and increase over time
-                fidelity_weight = min(args.fidelity_weight, args.fidelity_weight * (global_step / 200))  # Gradually increase from 0.01 to 0.1
+                fidelity_weight = min(args.fidelity_weight, args.fidelity_weight * (global_step / 200))
                 
                 if accelerator.is_main_process and global_step % 100 == 0:
                     main_loss_val = F.mse_loss(model_pred.float(), target.float(), reduction="mean").item()
                     fidelity_comp_val = (fidelity_loss * fidelity_weight).item()
                     logger.info(f"Step {global_step}: Main Loss: {main_loss_val:.6f}, Weighted Fidelity Comp: {fidelity_comp_val:.6f}")
 
-                # Add to the main loss - use the simple proxy for training
                 loss = loss + fidelity_weight * fidelity_loss
 
-                # Gather the losses across all processes for logging (if we use distributed training).
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
                 train_loss += avg_loss.item() / args.gradient_accumulation_steps
 
-                # Backpropagation
                 accelerator.backward(loss)
                 
                 if accelerator.sync_gradients:
@@ -1245,7 +1179,6 @@ def main():
                     optimizer.zero_grad()
                     lr_scheduler.step()
 
-            # Checks if the accelerator has performed an optimization step behind the scenes
             if accelerator.sync_gradients:
                 if args.use_ema:
                     ema_unet.step(unet.parameters())
@@ -1260,7 +1193,6 @@ def main():
                         accelerator.save_state(save_path)
                         logger.info(f"Saved state to {save_path}")
 
-                        # Optionally clean up old checkpoints
                         if args.checkpoints_total_limit is not None:
                             checkpoints = os.path.join(args.output_dir, "checkpoint-*")
                             checkpoints = sorted(glob.glob(checkpoints), key=lambda x: int(x.split("-")[-1]))
@@ -1287,7 +1219,6 @@ def main():
                             ema_unet.store(unet.parameters())
                             ema_unet.copy_to(unet.parameters())
                             
-                        # Create the pipeline with the correct fidelity_mlp
                         pipeline = StableDiffusionInstructPix2PixPipeline.from_pretrained(
                             args.pretrained_model_name_or_path,
                             unet=unwrap_model(unet),
@@ -1297,7 +1228,6 @@ def main():
                             variant=args.variant,
                             torch_dtype=weight_dtype,
                         )
-                        # Directly attach the unwrapped fidelity_mlp
                         pipeline.fidelity_mlp = accelerator.unwrap_model(fidelity_mlp)
                         
                         accelerator.step = global_step
@@ -1323,9 +1253,9 @@ def main():
 
         if accelerator.is_main_process:
             if args.val_images_dir is not None and (
-                (global_step == 10) or  # First validation early in training
-                (args.validation_steps > 0 and global_step % args.validation_steps == 0) or  # Regular validation during training
-                (global_step >= args.max_train_steps)  # Final validation
+                (global_step == 100) or
+                (args.validation_steps > 0 and global_step % args.validation_steps == 0) or
+                (global_step >= args.max_train_steps)
             ):
                 logger.info(f"Running validation at step {global_step}")
                 if args.use_ema:
@@ -1341,7 +1271,6 @@ def main():
                     variant=args.variant,
                     torch_dtype=weight_dtype,
                 )
-                # Directly attach the unwrapped fidelity_mlp to the pipeline
                 pipeline.fidelity_mlp = accelerator.unwrap_model(fidelity_mlp)
 
                 log_validation(
@@ -1357,7 +1286,6 @@ def main():
                 del pipeline
                 torch.cuda.empty_cache()
 
-    # Create the pipeline using the trained modules and save it.
     accelerator.wait_for_everyone()
     if accelerator.is_main_process:
         if args.use_ema:
@@ -1366,11 +1294,9 @@ def main():
         unet = unwrap_model(unet)
         text_encoder = unwrap_model(text_encoder)
 
-        # Save the trained models
         unet.save_pretrained(os.path.join(args.output_dir, "unet"))
         text_encoder.save_pretrained(os.path.join(args.output_dir, "text_encoder"))
 
-        # Save the pipeline
         pipeline = StableDiffusionInstructPix2PixPipeline.from_pretrained(
             args.pretrained_model_name_or_path,
             unet=accelerator.unwrap_model(unet),
@@ -1379,7 +1305,6 @@ def main():
             variant=args.variant,
             torch_dtype=weight_dtype,
         )
-        # attach the unwrapped fidelity_mlp to the pipeline to log_validation correctly
         pipeline.fidelity_mlp = accelerator.unwrap_model(fidelity_mlp)
         pipeline.save_pretrained(args.output_dir)
         
@@ -1403,17 +1328,14 @@ def main():
                 generator,
             )
 
-        # At the end of training, save the fidelity_mlp
         if args.fidelity_mlp_path:
             if accelerator.is_main_process:
-                # Get the fidelity_mlp from the unwrapped model
                 unwrapped_fidelity_mlp = accelerator.unwrap_model(fidelity_mlp)
                 unwrapped_fidelity_mlp.save_pretrained(args.fidelity_mlp_path)
                 logger.info(f"Saved FidelityMLP to {args.fidelity_mlp_path}")
 
-    # Too noisy to be helpful
     if global_step % args.validation_steps == 0:
-        test_fidelities = [0.1, 0.5, 0.9]  # Low, medium, high
+        test_fidelities = [0.1, 0.5, 0.9]
         with torch.no_grad():
             for f_val in test_fidelities:
                 test_tensor = torch.tensor([[f_val]], device=accelerator.device)
@@ -1430,7 +1352,7 @@ def compute_fidelity_loss(
     fidelity_values: torch.Tensor,
     loss_type: str = "l1",
     lpips_model: Optional[nn.Module] = None,
-    device: torch.device = torch.device("cpu") # Pass the device
+    device: torch.device = torch.device("cpu")
 ) -> torch.Tensor:
     """
     Compute a fidelity-weighted loss balancing input preservation and edit strength.
@@ -1447,7 +1369,6 @@ def compute_fidelity_loss(
     Returns:
         A loss tensor.
     """
-    # Ensure images are on the correct device and float32
     pred_images = pred_images.to(device=device, dtype=torch.float32)
     input_images = input_images.to(device=device, dtype=torch.float32)
     target_images = target_images.to(device=device, dtype=torch.float32)
@@ -1458,29 +1379,22 @@ def compute_fidelity_loss(
     dist_to_target = torch.zeros(batch_size, device=device)
 
     if loss_type == "l1":
-        # L1 Loss (Absolute Difference)
         dist_to_input = torch.abs(pred_images - input_images).mean(dim=[1, 2, 3])
         dist_to_target = torch.abs(pred_images - target_images).mean(dim=[1, 2, 3])
 
     elif loss_type == "ssim":
-        # SSIM Loss: ssim function returns similarity (higher is better), so loss is 1 - ssim
-        # Ensure images are in [0, 1] range for SSIM if they are not already
         pred_images_01 = (pred_images + 1) / 2 if pred_images.min() < 0 else pred_images
         input_images_01 = (input_images + 1) / 2 if input_images.min() < 0 else input_images
         target_images_01 = (target_images + 1) / 2 if target_images.min() < 0 else target_images
 
-        # Calculate SSIM per image in the batch
         for i in range(batch_size):
-             # data_range is 1.0 since images are normalized to [0, 1]
             dist_to_input[i] = 1.0 - ssim(pred_images_01[i].unsqueeze(0), input_images_01[i].unsqueeze(0), data_range=1.0, size_average=True)
             dist_to_target[i] = 1.0 - ssim(pred_images_01[i].unsqueeze(0), target_images_01[i].unsqueeze(0), data_range=1.0, size_average=True)
 
     elif loss_type == "lpips":
-        # LPIPS Loss: Measures perceptual distance (lower is better)
         if lpips_model is None:
             raise ValueError("lpips_model must be provided for loss_type 'lpips'")
         print("the device is", device)
-        # LPIPS expects input range [-1, 1]
         pred_images_norm = pred_images if pred_images.min() >= -1 else (pred_images * 2) - 1
         input_images_norm = input_images if input_images.min() >= -1 else (input_images * 2) - 1
         target_images_norm = target_images if target_images.min() >= -1 else (target_images * 2) - 1
@@ -1491,9 +1405,6 @@ def compute_fidelity_loss(
     else:
         raise ValueError(f"Unknown loss_type: {loss_type}")
 
-    # Weighted combination based on fidelity:
-    # High fidelity (close to 1) -> emphasize distance to input
-    # Low fidelity (close to 0) -> emphasize distance to target
     weighted_loss = (fidelity_values * dist_to_input) + ((1 - fidelity_values) * dist_to_target)
 
     return weighted_loss.mean()
