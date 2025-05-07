@@ -6,6 +6,7 @@
 <p><em>Draw like a 5-year-old but get Great results!</em></p>
 
 [![WebPage](https://img.shields.io/badge/Web-Page-green)](https://scaryplasmon.github.io/DoodlePix/)
+[![WebPage](https://img.shields.io/badge/Hugging_Face-orange)](https://huggingface.co/Scaryplasmon96/DoodlePixV1)
 
 
 <p>
